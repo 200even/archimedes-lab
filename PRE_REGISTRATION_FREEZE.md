@@ -111,3 +111,16 @@ The Critic receives only: (a) immutable permitted observation records, (b) neutr
 The Critic's raw prose and hidden reasoning are never passed back to the Conjecturer. Only schema-valid Experiment ASTs and deterministic adjudication results enter the shared ledger.
 
 No agent-side process may mount, import, inspect, or query the hidden world file, generator source, generation seed, validation report, ground-truth q, hidden program parameters, or B transfer results before run closure.
+
+## Pre-agent blinding amendment (0.1.1)
+
+Added before any Conjecturer prompt or model experiment. This amendment changes no causal grammar, threshold, budget, metric, or hypothesis. It closes a metadata leakage route discovered during Broker implementation.
+
+Agent-visible world metadata must not reveal either the generator seed or whether a world is causal versus Null. Accordingly:
+
+- public `world_kind` is always the condition-neutral value `experimental`;
+- benchmark bundles receive opaque random `world_id` values unrelated to seed or condition;
+- the raw generator seed and true `world_kind` remain trusted-side only;
+- filenames exposed to an agent may not encode `null`, `causal`, or the seed.
+
+This is a blinding safeguard, not an experimental degree of freedom. The hidden artifact retains the seed and condition for evaluator replay after unblinding.

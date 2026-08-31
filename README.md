@@ -1,6 +1,6 @@
 # Archimedes V0 — Hidden World Generator
 
-This repository contains the first authorized implementation artifact for **Archimedes**, an experiment in autonomous explanatory concept discovery. V0 deliberately contains **no Conjecturer prompt**. The preregistration freeze is committed before any Conjecturer implementation.
+This package is the first authorized implementation artifact for Archimedes V0. It deliberately contains **no Conjecturer prompt**. The preregistration freeze is committed before any Conjecturer implementation.
 
 ## Boundary
 
@@ -29,10 +29,25 @@ python -m archimedes_v0.cli 43 --out worlds --null
 pytest -q
 ```
 
-## Experimental status
+## Non-claim
 
-**Referee decision: C — AUTHORIZE V0 ONLY.**
+V0 does not test D5 ontological revision. It tests D4 only: frozen latent identity reused across a structurally distinct paradigm and evaluated through sealed interventional transfer.
 
-V0 tests D4 only: frozen latent identity reused across a structurally distinct paradigm and evaluated through sealed interventional transfer. D5 ontological revision is explicitly deferred.
+## Experiment Broker
 
-See [`PRE_REGISTRATION_FREEZE.md`](PRE_REGISTRATION_FREEZE.md) for the binding V0 execution contract.
+`archimedes_v0.broker.ExperimentBroker` now enforces the V0 execution boundary before any Conjecturer exists:
+
+- exactly 64 visible A-discovery interventions before theory freeze;
+- immutable freezing of the entity-level latent assignments;
+- exactly 32 visible B-calibration interventions on the broker-revealed calibration subset;
+- deterministic generation of 32 sealed B-transfer challenges (four distinct actions for each held-out entity);
+- no transfer measurement is returned to the operating agent before run closure;
+- exact 128-intervention exhaustion before D4 scoring;
+- a hash-chained append-only experiment ledger; and
+- the preregistered 12-cycle epistemic cap.
+
+The trusted runtime key used to select transfer challenges stays behind the Broker boundary. The agent can inspect the challenge interventions once B transfer begins, but cannot derive them from repository source alone and never receives their outcomes until the run is closed.
+
+### Condition blinding
+
+A pre-agent audit found that early development IDs encoded the seed and causal/Null condition. That would invalidate the Null-World false-positive test. V0.1.1 closes this route: benchmark bundles use opaque random world IDs and expose the same public `world_kind: experimental` for causal and Null worlds. Seed and true condition remain sealed evaluator metadata only. See the blinding amendment in `PRE_REGISTRATION_FREEZE.md`.

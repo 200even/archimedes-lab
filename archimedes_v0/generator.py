@@ -2,6 +2,7 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import uuid
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
@@ -79,15 +80,19 @@ def _sample_program_b(rng: random.Random) -> Program:
     return p
 
 
-def generate_world(seed: int, *, null_world: bool = False, max_attempts: int = 1000) -> tuple[PublicWorld, HiddenWorldSpec, dict[str, Any]]:
+def generate_world(seed: int, *, null_world: bool = False, max_attempts: int = 1000, world_id: str | None = None) -> tuple[PublicWorld, HiddenWorldSpec, dict[str, Any]]:
     entities = [f"entity_{i:02d}" for i in range(NUM_ENTITIES)]
     kind = "null" if null_world else "causal"
-    world_id = f"v0-{kind}-{seed:08d}"
+    # Public metadata must not disclose benchmark condition or raw generator seed.
+    # Direct calls use a condition-independent dev ID; write_world_bundle() supplies
+    # a random opaque ID for actual benchmark bundles.
+    if world_id is None:
+        world_id = "v0-dev-" + hashlib.sha256(f"archimedes-v0-public:{seed}".encode()).hexdigest()[:16]
 
     public = PublicWorld(
         schema_version=SCHEMA_VERSION,
         world_id=world_id,
-        world_kind=kind,
+        world_kind="experimental",
         domain_size=DOMAIN_SIZE,
         entities=entities,
         legal_action_values=list(range(DOMAIN_SIZE)),
@@ -127,8 +132,6 @@ def generate_world(seed: int, *, null_world: bool = False, max_attempts: int = 1
         q_by_entity = dict(zip(entities, q_values, strict=True))
         pa, pb = _sample_program_a(rng), _sample_program_b(rng)
 
-        # Stratified hidden B split: exactly one entity from each q state calibrates B;
-        # its paired entity is sealed for transfer. The pairing itself is not public.
         cal, transfer = [], []
         for q in range(DOMAIN_SIZE):
             members = [e for e in entities if q_by_entity[e] == q]
@@ -149,9 +152,11 @@ def generate_world(seed: int, *, null_world: bool = False, max_attempts: int = 1
     raise RuntimeError(f"could not generate valid world after {max_attempts} attempts")
 
 
-def write_world_bundle(out_dir: str | Path, seed: int, *, null_world: bool = False) -> dict[str, str]:
+def write_world_bundle(out_dir: str | Path, seed: int, *, null_world: bool = False, world_id: str | None = None) -> dict[str, str]:
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
-    public, hidden, report = generate_world(seed, null_world=null_world)
+    if world_id is None:
+        world_id = f"v0-world-{uuid.uuid4().hex[:16]}"
+    public, hidden, report = generate_world(seed, null_world=null_world, world_id=world_id)
     pub_path = out / f"{public.world_id}.public.json"
     hid_path = out / f"{public.world_id}.hidden.json"
     rep_path = out / f"{public.world_id}.validation.json"
