@@ -9,6 +9,9 @@ description = "Preregistered hidden-world generator and epistemic broker for the
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.8"]
 
+[tool.setuptools]
+packages = ["archimedes_v0"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
