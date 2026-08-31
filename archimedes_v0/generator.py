@@ -7,10 +7,21 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
 from .constants import (
-    SCHEMA_VERSION, DOMAIN_SIZE, NUM_ENTITIES, LATENT_REPLICATION,
-    PARADIGM_A_TEMPLATES, PARADIGM_B_TEMPLATES, ODD_MULTIPLIERS,
-    ROTATIONS, MEASUREMENT_NOISE_RATE, BROKER_BUDGET_TOTAL,
-    BUDGET_A_DISCOVERY, BUDGET_B_CALIBRATION, BUDGET_B_TRANSFER_EVAL,
+    SCHEMA_VERSION,
+    DOMAIN_SIZE,
+    NUM_ENTITIES,
+    HIDDEN_LATENT_CARDINALITIES,
+    PARADIGM_A_TEMPLATES,
+    PARADIGM_B_TEMPLATES,
+    ODD_MULTIPLIERS,
+    ROTATIONS,
+    MEASUREMENT_NOISE_RATE,
+    BROKER_BUDGET_TOTAL,
+    BUDGET_A_DISCOVERY,
+    BUDGET_A_THEORY_EVAL,
+    BUDGET_B_CALIBRATION,
+    BUDGET_B_THEORY_EVAL,
+    BUDGET_B_TRANSFER_EVAL,
 )
 from .grammar import Program, assert_grammar_invariants
 from .validation import validate_hidden_world
@@ -34,6 +45,7 @@ class HiddenWorldSpec:
     world_id: str
     world_kind: str
     generator_seed: int
+    latent_cardinality: int | None
     latent_q_by_entity: dict[str, int] | None
     program_a: dict[str, Any] | None
     program_b: dict[str, Any] | None
@@ -80,12 +92,47 @@ def _sample_program_b(rng: random.Random) -> Program:
     return p
 
 
+def _balanced_q_values(k: int, rng: random.Random) -> list[int]:
+    """Create a near-balanced hidden partition without exposing k publicly."""
+    base, remainder = divmod(NUM_ENTITIES, k)
+    states = list(range(k))
+    rng.shuffle(states)
+    counts = {q: base + (1 if q in set(states[:remainder]) else 0) for q in range(k)}
+    values = [q for q in range(k) for _ in range(counts[q])]
+    rng.shuffle(values)
+    return values
+
+
+def _balanced_b_split(entities: list[str], q_by_entity: dict[str, int], k: int, rng: random.Random) -> tuple[list[str], list[str]]:
+    """Split 8/8 while placing every hidden state on both sides."""
+    groups: dict[int, list[str]] = {}
+    for q in range(k):
+        members = [e for e in entities if q_by_entity[e] == q]
+        rng.shuffle(members)
+        groups[q] = members
+
+    odd_states = [q for q, members in groups.items() if len(members) % 2]
+    rng.shuffle(odd_states)
+    extra_to_cal = set(odd_states[::2])
+
+    cal: list[str] = []
+    transfer: list[str] = []
+    for q in range(k):
+        members = groups[q]
+        half = len(members) // 2
+        cal.extend(members[:half])
+        transfer.extend(members[half:2 * half])
+        if len(members) % 2:
+            (cal if q in extra_to_cal else transfer).append(members[-1])
+
+    if len(cal) != NUM_ENTITIES // 2 or len(transfer) != NUM_ENTITIES // 2:
+        raise AssertionError("balanced split construction failed")
+    return sorted(cal), sorted(transfer)
+
+
 def generate_world(seed: int, *, null_world: bool = False, max_attempts: int = 1000, world_id: str | None = None) -> tuple[PublicWorld, HiddenWorldSpec, dict[str, Any]]:
     entities = [f"entity_{i:02d}" for i in range(NUM_ENTITIES)]
     kind = "null" if null_world else "causal"
-    # Public metadata must not disclose benchmark condition or raw generator seed.
-    # Direct calls use a condition-independent dev ID; write_world_bundle() supplies
-    # a random opaque ID for actual benchmark bundles.
     if world_id is None:
         world_id = "v0-dev-" + hashlib.sha256(f"archimedes-v0-public:{seed}".encode()).hexdigest()[:16]
 
@@ -101,7 +148,9 @@ def generate_world(seed: int, *, null_world: bool = False, max_attempts: int = 1
         broker_budget={
             "total": BROKER_BUDGET_TOTAL,
             "A_discovery": BUDGET_A_DISCOVERY,
+            "A_theory_eval": BUDGET_A_THEORY_EVAL,
             "B_calibration": BUDGET_B_CALIBRATION,
+            "B_theory_eval": BUDGET_B_THEORY_EVAL,
             "B_transfer_eval": BUDGET_B_TRANSFER_EVAL,
         },
         semantics={
@@ -116,34 +165,43 @@ def generate_world(seed: int, *, null_world: bool = False, max_attempts: int = 1
         split_rng = _rng(seed, "split")
         shuffled = entities.copy(); split_rng.shuffle(shuffled)
         hidden = HiddenWorldSpec(
-            schema_version=SCHEMA_VERSION, world_id=world_id, world_kind=kind,
-            generator_seed=seed, latent_q_by_entity=None, program_a=None, program_b=None,
-            b_calibration_entities=sorted(shuffled[:NUM_ENTITIES//2]),
-            b_transfer_entities=sorted(shuffled[NUM_ENTITIES//2:]),
-            measurement_noise_rate=MEASUREMENT_NOISE_RATE, measurement_noise_key=noise_key,
+            schema_version=SCHEMA_VERSION,
+            world_id=world_id,
+            world_kind=kind,
+            generator_seed=seed,
+            latent_cardinality=None,
+            latent_q_by_entity=None,
+            program_a=None,
+            program_b=None,
+            b_calibration_entities=sorted(shuffled[:NUM_ENTITIES // 2]),
+            b_transfer_entities=sorted(shuffled[NUM_ENTITIES // 2:]),
+            measurement_noise_rate=MEASUREMENT_NOISE_RATE,
+            measurement_noise_key=noise_key,
         )
         report = {"accepted": True, "kind": "null", "reason": "null worlds intentionally contain no causal signal"}
         return public, hidden, report
 
     for attempt in range(max_attempts):
         rng = _rng(seed + attempt * 1000003, "world")
-        q_values = [q for q in range(DOMAIN_SIZE) for _ in range(LATENT_REPLICATION)]
-        rng.shuffle(q_values)
+        k = rng.choice(HIDDEN_LATENT_CARDINALITIES)
+        q_values = _balanced_q_values(k, rng)
         q_by_entity = dict(zip(entities, q_values, strict=True))
         pa, pb = _sample_program_a(rng), _sample_program_b(rng)
-
-        cal, transfer = [], []
-        for q in range(DOMAIN_SIZE):
-            members = [e for e in entities if q_by_entity[e] == q]
-            rng.shuffle(members)
-            cal.append(members[0]); transfer.append(members[1])
+        cal, transfer = _balanced_b_split(entities, q_by_entity, k, rng)
 
         hidden = HiddenWorldSpec(
-            schema_version=SCHEMA_VERSION, world_id=world_id, world_kind=kind,
-            generator_seed=seed, latent_q_by_entity=q_by_entity,
-            program_a=pa.to_dict(), program_b=pb.to_dict(),
-            b_calibration_entities=sorted(cal), b_transfer_entities=sorted(transfer),
-            measurement_noise_rate=MEASUREMENT_NOISE_RATE, measurement_noise_key=noise_key,
+            schema_version=SCHEMA_VERSION,
+            world_id=world_id,
+            world_kind=kind,
+            generator_seed=seed,
+            latent_cardinality=k,
+            latent_q_by_entity=q_by_entity,
+            program_a=pa.to_dict(),
+            program_b=pb.to_dict(),
+            b_calibration_entities=cal,
+            b_transfer_entities=transfer,
+            measurement_noise_rate=MEASUREMENT_NOISE_RATE,
+            measurement_noise_key=noise_key,
         )
         report = validate_hidden_world(hidden)
         if report["accepted"]:
