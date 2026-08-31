@@ -77,14 +77,6 @@ class _Node:
     depth: int
     canonical: str
 
-    @property
-    def errors(self) -> int:
-        return self.total - self.correct
-
-    @property
-    def total(self) -> int:
-        return len(self._observations) if hasattr(self, "_observations") else 0
-
 
 class CandidateSynthesizer(Protocol):
     """Visible-data-only law fitting shared identically by Full and Flat.
