@@ -1,4 +1,4 @@
-SCHEMA_VERSION = "0.1.0"
+SCHEMA_VERSION = "0.1.2"
 
 # PRE-CODE FREEZE — V0 binding constants.
 DOMAIN_SIZE = 8
@@ -28,6 +28,9 @@ MAX_EPISTEMIC_CYCLES = 12
 
 # D4 identity freeze. q is discrete: after A freeze, zero assignment changes are permitted.
 STABLE_IDENTITY_MAX_ASSIGNMENT_CHANGES = 0
+
+# Minimum exact fit required for the frozen A explanation and final B-calibration law.
+D4_VISIBLE_FIT_ACCURACY_MIN = 0.90
 
 # Prediction success threshold used for individual-world D4 qualification.
 # Cross-world statistical comparison against Flat LLM + SR remains the primary claim.
