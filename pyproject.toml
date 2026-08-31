@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "archimedes-v0"
-version = "0.1.0"
-description = "Preregistered hidden-world generator for the Archimedes V0 epistemic-agent experiment"
+version = "0.1.2"
+description = "Preregistered hidden-world generator and epistemic broker for the Archimedes V0 experiment"
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.8"]
 
