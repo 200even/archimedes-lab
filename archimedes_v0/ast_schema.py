@@ -1,7 +1,16 @@
 from __future__ import annotations
 from typing import Annotated, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from .constants import SCHEMA_VERSION, DOMAIN_SIZE, BIT_WIDTH
+from .constants import (
+    SCHEMA_VERSION,
+    DOMAIN_SIZE,
+    BIT_WIDTH,
+    MIN_LATENT_CARDINALITY,
+    MAX_LATENT_CARDINALITY,
+    MIN_ENTITIES_PER_LATENT_STATE,
+    LATENT_DOMAIN_KIND,
+    LATENT_GEOMETRY,
+)
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -12,7 +21,7 @@ class VarExpr(StrictModel):
 
 class ConstExpr(StrictModel):
     kind: Literal["const"] = "const"
-    value: int
+    value: int = Field(ge=0, lt=DOMAIN_SIZE)
 
 class AddModExpr(StrictModel):
     kind: Literal["add_mod"] = "add_mod"
@@ -48,27 +57,93 @@ class PermutationExpr(StrictModel):
             raise ValueError("mapping must be a permutation of 0..DOMAIN_SIZE-1")
         return self
 
+# V0.1.3 B2 distractors. All operate on the same 3-bit finite domain as the true
+# operators; none requires a foreign float/string type that would make it trivial
+# to reject from the schema alone.
+class BitAndExpr(StrictModel):
+    kind: Literal["bit_and"] = "bit_and"
+    left: "Expr"
+    right: "Expr"
+
+class BitOrExpr(StrictModel):
+    kind: Literal["bit_or"] = "bit_or"
+    left: "Expr"
+    right: "Expr"
+
+class MinU3Expr(StrictModel):
+    kind: Literal["min_u3"] = "min_u3"
+    left: "Expr"
+    right: "Expr"
+
+class MaxU3Expr(StrictModel):
+    kind: Literal["max_u3"] = "max_u3"
+    left: "Expr"
+    right: "Expr"
+
+class AbsDiffExpr(StrictModel):
+    kind: Literal["abs_diff"] = "abs_diff"
+    left: "Expr"
+    right: "Expr"
+
+class EqMaskExpr(StrictModel):
+    kind: Literal["eq_mask"] = "eq_mask"
+    left: "Expr"
+    right: "Expr"
+
 Expr = Annotated[
-    Union[VarExpr, ConstExpr, AddModExpr, MulModExpr, XorExpr, RotlExpr, PermutationExpr],
+    Union[
+        VarExpr,
+        ConstExpr,
+        AddModExpr,
+        MulModExpr,
+        XorExpr,
+        RotlExpr,
+        PermutationExpr,
+        BitAndExpr,
+        BitOrExpr,
+        MinU3Expr,
+        MaxU3Expr,
+        AbsDiffExpr,
+        EqMaskExpr,
+    ],
     Field(discriminator="kind"),
 ]
 
 # Rebuild recursive models.
-for cls in (AddModExpr, MulModExpr, XorExpr, RotlExpr, PermutationExpr):
+for cls in (
+    AddModExpr,
+    MulModExpr,
+    XorExpr,
+    RotlExpr,
+    PermutationExpr,
+    BitAndExpr,
+    BitOrExpr,
+    MinU3Expr,
+    MaxU3Expr,
+    AbsDiffExpr,
+    EqMaskExpr,
+):
     cls.model_rebuild()
 
 class LatentVariable(StrictModel):
     name: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
     scope: Literal["entity"] = "entity"
-    domain_kind: Literal["categorical"] = "categorical"
-    cardinality: Literal[DOMAIN_SIZE] = DOMAIN_SIZE
+    domain_kind: Literal[LATENT_DOMAIN_KIND] = LATENT_DOMAIN_KIND
+    geometry: Literal[LATENT_GEOMETRY] = LATENT_GEOMETRY
+    cardinality: int = Field(ge=MIN_LATENT_CARDINALITY, le=MAX_LATENT_CARDINALITY)
     assignments: dict[str, int]
     frozen: bool = False
 
     @model_validator(mode="after")
     def assignments_in_domain(self):
-        if any(v < 0 or v >= DOMAIN_SIZE for v in self.assignments.values()):
-            raise ValueError("latent assignment outside domain")
+        if any(v < 0 or v >= self.cardinality for v in self.assignments.values()):
+            raise ValueError("latent assignment outside declared cardinality")
+        used = set(self.assignments.values())
+        if used != set(range(self.cardinality)):
+            raise ValueError("latent assignments must use every declared state exactly as labels 0..k-1")
+        counts = {state: sum(v == state for v in self.assignments.values()) for state in used}
+        if any(count < MIN_ENTITIES_PER_LATENT_STATE for count in counts.values()):
+            raise ValueError("each latent state must cover at least two entities")
         return self
 
 class ProgramSpec(StrictModel):
