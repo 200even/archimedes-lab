@@ -1,0 +1,47 @@
+{
+  "analysis": {
+    "alpha": 0.05,
+    "minimum_mean_advantage": 0.05,
+    "paired_sign_flip_draws": 100000,
+    "rng_seed": 20260830
+  },
+  "execution_authorized": false,
+  "max_output_tokens": {
+    "conjecturer": 4096,
+    "critic": 2048,
+    "flat": 8192
+  },
+  "model": {
+    "api_version": null,
+    "model_id": null,
+    "provider": null,
+    "seed_behavior": null,
+    "temperature": 0,
+    "timeout_seconds": null,
+    "top_p": 1,
+    "transport_retry_policy": null
+  },
+  "schedule": {
+    "flat": {
+      "a_round_batches": [10,10,10,10,10,10],
+      "b_round_batches": [7,7,7,7],
+      "flat_max_calls": 12
+    },
+    "full": {
+      "a_round_batches": [10,10,10,10,10,10],
+      "b_round_batches": [7,7,7,7],
+      "conjecturer_max_calls": 11,
+      "critic_max_calls": 10
+    }
+  },
+  "status": "DRAFT_NOT_AUTHORIZED_FOR_EXPOSURE",
+  "synthesis": {
+    "implementation": null,
+    "shared_identically_across_arms": true,
+    "version": null
+  },
+  "worlds": {
+    "causal_paired_per_arm": 100,
+    "null_full": 100
+  }
+}

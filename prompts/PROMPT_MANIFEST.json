@@ -1,0 +1,25 @@
+{
+  "forbidden_instruction_words": [
+    "null",
+    "hidden",
+    "state",
+    "property",
+    "invariant",
+    "concept"
+  ],
+  "prompts": {
+    "conjecturer_system.txt": {
+      "bytes": 749,
+      "sha256": "e5d3bcefd83d39d98a2f378b42393ea1c6c9edc435fbe8ec483d7472f7fae327"
+    },
+    "critic_system.txt": {
+      "bytes": 745,
+      "sha256": "a43fe306356c2384f86c6cecc928f49ec09aa83a7a83e5870c90fe8f19b28673"
+    },
+    "flat_system.txt": {
+      "bytes": 793,
+      "sha256": "97f12507a99c20da9a7251e93ae4b9e3734a85c8d2f641ba7830397e368b6033"
+    }
+  },
+  "status": "DRAFT_PRE_EXPOSURE"
+}
