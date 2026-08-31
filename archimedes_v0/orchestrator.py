@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Any, Iterable
 
 from .agent_interfaces import StatelessConjecturer, StatelessCritic, StatelessFlatAgent
@@ -77,8 +77,16 @@ def _common_payload(broker: ExperimentBroker, *, phase: str, round_index: int) -
     }
 
 
+def _selection_models(synthesized: tuple[TheoryAST, ...], proposed: tuple[TheoryAST, ...]) -> tuple[TheoryAST, ...]:
+    return synthesized if synthesized else proposed
+
+
+def _target_ids(models: tuple[TheoryAST, ...]) -> set[str]:
+    return {theory.theory_id for theory in models} or {"T-explore"}
+
+
 class ArchimedesOrchestrator:
-    """Deterministic Full-arm schedule. Defining this class does not execute a model."""
+    """Deterministic Full schedule: Conjecturer -> synthesis -> isolated Critic."""
 
     def __init__(
         self,
@@ -98,34 +106,44 @@ class ArchimedesOrchestrator:
     def run(self) -> OrchestrationResult:
         if not self.execution_authorized:
             raise OrchestrationError("benchmark execution is blocked pending pre-exposure referee authorization")
+
         conjecturer_calls = 0
         critic_calls = 0
         a_minimality: FunctionalMinimalityResult | None = None
+        previous_synthesized: tuple[TheoryAST, ...] = ()
 
         for round_index, batch_size in enumerate(A_BATCH_SIZES, start=1):
             self.broker.start_epistemic_cycle()
             base = _common_payload(self.broker, phase="A", round_index=round_index)
+            proposal = self.conjecturer.propose_candidates(
+                {
+                    **base,
+                    "prior_synthesis_results": list(neutral_theories(previous_synthesized)),
+                }
+            )
+            conjecturer_calls += 1
+            proposed = tuple(proposal.candidates)
             synthesized = self.synthesizer.synthesize(
                 paradigm="A",
                 observations=tuple(base["observations"]),
+                candidate_theories=proposed,
                 frozen_a_theory=None,
-                limit=4,
+                limit=32,
             )
-            proposal = self.conjecturer.propose_candidates(
-                {**base, "synthesized_models": list(neutral_theories(synthesized))}
+            previous_synthesized = synthesized
+            selection_models = _selection_models(synthesized, proposed)
+            targets = _target_ids(selection_models)
+
+            batch = self.critic.propose_experiments(
+                {
+                    **base,
+                    "candidate_models": list(neutral_theories(selection_models)),
+                    "allowed_entity_ids": sorted(self.broker.public["entities"]),
+                    "legal_action_values": list(range(DOMAIN_SIZE)),
+                    "allowed_target_ids": sorted(targets),
+                    "required_batch_size": batch_size,
+                }
             )
-            conjecturer_calls += 1
-            candidates = tuple(proposal.candidates)
-            targets = {theory.theory_id for theory in candidates} or {"T-explore"}
-            critic_payload = {
-                **base,
-                "candidate_models": list(neutral_theories(candidates)),
-                "allowed_entity_ids": sorted(self.broker.public["entities"]),
-                "legal_action_values": list(range(DOMAIN_SIZE)),
-                "allowed_target_ids": sorted(targets),
-                "required_batch_size": batch_size,
-            }
-            batch = self.critic.propose_experiments(critic_payload)
             critic_calls += 1
             experiments = _validate_batch(
                 batch,
@@ -137,11 +155,13 @@ class ArchimedesOrchestrator:
             for experiment in experiments:
                 self.broker.run_visible_experiment(experiment)
 
-        a_payload = {
-            **_common_payload(self.broker, phase="A_COMMIT", round_index=7),
-            "instruction": "Return one executable model or abstain.",
-        }
-        a_decision = self.conjecturer.decide_a(a_payload)
+        a_decision = self.conjecturer.decide_a(
+            {
+                **_common_payload(self.broker, phase="A_COMMIT", round_index=7),
+                "synthesis_results": list(neutral_theories(previous_synthesized)),
+                "instruction": "Return one executable model or abstain.",
+            }
+        )
         conjecturer_calls += 1
         if a_decision.decision == "abstain":
             result = self.broker.declare_no_concept()
@@ -160,37 +180,43 @@ class ArchimedesOrchestrator:
         frozen_a = self.broker.freeze_a_theory(a_decision.theory)
         a_minimality = functional_minimality(frozen_a, "A")
         calibration_entities = self.broker.open_b_calibration()
+        previous_synthesized = ()
 
         for offset, batch_size in enumerate(B_BATCH_SIZES, start=1):
             round_index = len(A_BATCH_SIZES) + offset
             self.broker.start_epistemic_cycle()
             base = _common_payload(self.broker, phase="B", round_index=round_index)
-            synthesized = self.synthesizer.synthesize(
-                paradigm="B",
-                observations=tuple(base["observations"]),
-                frozen_a_theory=frozen_a,
-                limit=4,
-            )
             proposal = self.conjecturer.propose_candidates(
                 {
                     **base,
                     "frozen_a_model": neutral_theory(frozen_a),
-                    "synthesized_models": list(neutral_theories(synthesized)),
+                    "prior_synthesis_results": list(neutral_theories(previous_synthesized)),
                 }
             )
             conjecturer_calls += 1
-            candidates = tuple(proposal.candidates)
-            targets = {theory.theory_id for theory in candidates} or {"T-explore"}
-            critic_payload = {
-                **base,
-                "frozen_a_model": neutral_theory(frozen_a),
-                "candidate_models": list(neutral_theories(candidates)),
-                "allowed_entity_ids": list(calibration_entities),
-                "legal_action_values": list(range(DOMAIN_SIZE)),
-                "allowed_target_ids": sorted(targets),
-                "required_batch_size": batch_size,
-            }
-            batch = self.critic.propose_experiments(critic_payload)
+            proposed = tuple(proposal.candidates)
+            synthesized = self.synthesizer.synthesize(
+                paradigm="B",
+                observations=tuple(base["observations"]),
+                candidate_theories=proposed,
+                frozen_a_theory=frozen_a,
+                limit=32,
+            )
+            previous_synthesized = synthesized
+            selection_models = _selection_models(synthesized, proposed)
+            targets = _target_ids(selection_models)
+
+            batch = self.critic.propose_experiments(
+                {
+                    **base,
+                    "frozen_a_model": neutral_theory(frozen_a),
+                    "candidate_models": list(neutral_theories(selection_models)),
+                    "allowed_entity_ids": list(calibration_entities),
+                    "legal_action_values": list(range(DOMAIN_SIZE)),
+                    "allowed_target_ids": sorted(targets),
+                    "required_batch_size": batch_size,
+                }
+            )
             critic_calls += 1
             experiments = _validate_batch(
                 batch,
@@ -202,12 +228,14 @@ class ArchimedesOrchestrator:
             for experiment in experiments:
                 self.broker.run_visible_experiment(experiment)
 
-        b_payload = {
-            **_common_payload(self.broker, phase="B_COMMIT", round_index=11),
-            "frozen_a_model": neutral_theory(frozen_a),
-            "instruction": "Return one executable model preserving every broker-frozen field.",
-        }
-        b_decision = self.conjecturer.decide_b(b_payload)
+        b_decision = self.conjecturer.decide_b(
+            {
+                **_common_payload(self.broker, phase="B_COMMIT", round_index=11),
+                "frozen_a_model": neutral_theory(frozen_a),
+                "synthesis_results": list(neutral_theories(previous_synthesized)),
+                "instruction": "Return one executable model preserving every broker-frozen field.",
+            }
+        )
         conjecturer_calls += 1
         self.broker.submit_b_theory(b_decision.theory)
         result = self.broker.execute_transfer_evaluation()
@@ -225,7 +253,7 @@ class ArchimedesOrchestrator:
 
 
 class FlatBaselineOrchestrator:
-    """Flat LLM+synthesis arm with identical observation/gate resource limits."""
+    """Compute-matched Flat schedule: same-role Generate -> synthesis -> Select."""
 
     def __init__(
         self,
@@ -243,34 +271,51 @@ class FlatBaselineOrchestrator:
     def run(self) -> OrchestrationResult:
         if not self.execution_authorized:
             raise OrchestrationError("benchmark execution is blocked pending pre-exposure referee authorization")
+
         flat_calls = 0
         a_minimality: FunctionalMinimalityResult | None = None
+        previous_synthesized: tuple[TheoryAST, ...] = ()
 
         for round_index, batch_size in enumerate(A_BATCH_SIZES, start=1):
             self.broker.start_epistemic_cycle()
             base = _common_payload(self.broker, phase="A", round_index=round_index)
+
+            proposal = self.agent.propose_candidates(
+                {
+                    **base,
+                    "prior_synthesis_results": list(neutral_theories(previous_synthesized)),
+                }
+            )
+            flat_calls += 1
+            proposed = tuple(proposal.candidates)
             synthesized = self.synthesizer.synthesize(
                 paradigm="A",
                 observations=tuple(base["observations"]),
+                candidate_theories=proposed,
                 frozen_a_theory=None,
-                limit=4,
+                limit=32,
             )
-            payload = {
-                **base,
-                "synthesized_models": list(neutral_theories(synthesized)),
-                "allowed_entity_ids": sorted(self.broker.public["entities"]),
-                "legal_action_values": list(range(DOMAIN_SIZE)),
-                "allowed_target_ids": ["T-flat"],
-                "required_batch_size": batch_size,
-            }
-            batch = self.agent.propose_experiments(payload)
+            previous_synthesized = synthesized
+            selection_models = _selection_models(synthesized, proposed)
+            targets = _target_ids(selection_models)
+
+            batch = self.agent.propose_experiments(
+                {
+                    **base,
+                    "candidate_models": list(neutral_theories(selection_models)),
+                    "allowed_entity_ids": sorted(self.broker.public["entities"]),
+                    "legal_action_values": list(range(DOMAIN_SIZE)),
+                    "allowed_target_ids": sorted(targets),
+                    "required_batch_size": batch_size,
+                }
+            )
             flat_calls += 1
             experiments = _validate_batch(
                 batch,
                 expected_count=batch_size,
                 paradigm="A",
                 allowed_entities=self.broker.public["entities"],
-                allowed_targets={"T-flat"},
+                allowed_targets=targets,
             )
             for experiment in experiments:
                 self.broker.run_visible_experiment(experiment)
@@ -278,6 +323,7 @@ class FlatBaselineOrchestrator:
         decision = self.agent.decide_a(
             {
                 **_common_payload(self.broker, phase="A_COMMIT", round_index=7),
+                "synthesis_results": list(neutral_theories(previous_synthesized)),
                 "instruction": "Return one executable model or abstain.",
             }
         )
@@ -299,34 +345,51 @@ class FlatBaselineOrchestrator:
         frozen_a = self.broker.freeze_a_theory(decision.theory)
         a_minimality = functional_minimality(frozen_a, "A")
         calibration_entities = self.broker.open_b_calibration()
+        previous_synthesized = ()
 
         for offset, batch_size in enumerate(B_BATCH_SIZES, start=1):
             round_index = len(A_BATCH_SIZES) + offset
             self.broker.start_epistemic_cycle()
             base = _common_payload(self.broker, phase="B", round_index=round_index)
+
+            proposal = self.agent.propose_candidates(
+                {
+                    **base,
+                    "frozen_a_model": neutral_theory(frozen_a),
+                    "prior_synthesis_results": list(neutral_theories(previous_synthesized)),
+                }
+            )
+            flat_calls += 1
+            proposed = tuple(proposal.candidates)
             synthesized = self.synthesizer.synthesize(
                 paradigm="B",
                 observations=tuple(base["observations"]),
+                candidate_theories=proposed,
                 frozen_a_theory=frozen_a,
-                limit=4,
+                limit=32,
             )
-            payload = {
-                **base,
-                "frozen_a_model": neutral_theory(frozen_a),
-                "synthesized_models": list(neutral_theories(synthesized)),
-                "allowed_entity_ids": list(calibration_entities),
-                "legal_action_values": list(range(DOMAIN_SIZE)),
-                "allowed_target_ids": ["T-flat"],
-                "required_batch_size": batch_size,
-            }
-            batch = self.agent.propose_experiments(payload)
+            previous_synthesized = synthesized
+            selection_models = _selection_models(synthesized, proposed)
+            targets = _target_ids(selection_models)
+
+            batch = self.agent.propose_experiments(
+                {
+                    **base,
+                    "frozen_a_model": neutral_theory(frozen_a),
+                    "candidate_models": list(neutral_theories(selection_models)),
+                    "allowed_entity_ids": list(calibration_entities),
+                    "legal_action_values": list(range(DOMAIN_SIZE)),
+                    "allowed_target_ids": sorted(targets),
+                    "required_batch_size": batch_size,
+                }
+            )
             flat_calls += 1
             experiments = _validate_batch(
                 batch,
                 expected_count=batch_size,
                 paradigm="B",
                 allowed_entities=calibration_entities,
-                allowed_targets={"T-flat"},
+                allowed_targets=targets,
             )
             for experiment in experiments:
                 self.broker.run_visible_experiment(experiment)
@@ -335,6 +398,7 @@ class FlatBaselineOrchestrator:
             {
                 **_common_payload(self.broker, phase="B_COMMIT", round_index=11),
                 "frozen_a_model": neutral_theory(frozen_a),
+                "synthesis_results": list(neutral_theories(previous_synthesized)),
                 "instruction": "Return one executable model preserving every broker-frozen field.",
             }
         )
