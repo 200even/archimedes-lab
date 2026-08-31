@@ -1,7 +1,7 @@
 # Archimedes V0 — Pre-Code Freeze
 
-**Freeze version:** 0.1.0  
-**Status:** Binding for V0 before any Conjecturer prompt is written.
+**Freeze version:** 0.1.2 candidate  
+**Status:** 0.1.0 + blinding amendment 0.1.1 are binding. Deterministic-use amendment 0.1.2 is implemented on `broker-hardening` but requires referee ratification before merge to `main` or any Conjecturer prompt.
 
 ## Primary V0 claim
 
@@ -124,3 +124,22 @@ Agent-visible world metadata must not reveal either the generator seed or whethe
 - filenames exposed to an agent may not encode `null`, `causal`, or the seed.
 
 This is a blinding safeguard, not an experimental degree of freedom. The hidden artifact retains the seed and condition for evaluator replay after unblinding.
+
+## Proposed pre-agent deterministic-use amendment (0.1.2)
+
+**Status: pending referee ratification.** Implemented only on the `broker-hardening` branch; no model experiment may use it until ratified.
+
+Proposed before any Conjecturer prompt or model experiment, after implementation review exposed a construct-validity loophole: accepting agent-supplied transfer predictions would allow a model to bypass its purported frozen concept. This amendment closes that route without changing the Hidden World grammar, intervention budgets, Null threshold, or 0.90 transfer criterion.
+
+Binding additions:
+
+- The frozen A theory must achieve at least **0.90 exact fit** on the 64 visible A observations before it may be frozen.
+- The final B program must achieve at least **0.90 exact fit** on the 32 visible B-calibration observations.
+- The A program itself freezes with the latent assignments and may not be rewritten after B observations are seen.
+- Both A and B programs must explicitly depend on the frozen latent variable and their paradigm intervention variable.
+- For the D4 operator-diversity requirement, define the nontrivial operator signature as all AST operator kinds except `var`, `const`, and the categorical relabeling wrapper `permute`. A and B qualify as structurally distinct only if both signatures are nonempty and disjoint.
+- Transfer predictions are generated deterministically by evaluating the committed B Theory AST with the frozen latent assignments. The agent may not supply alternative transfer predictions.
+- All 32 theory-derived transfer predictions are committed to the immutable ledger **before** the first sealed transfer observation is requested.
+- V0 categorical constants are restricted to the domain `D = {0,...,7}`; the frozen JSON schema is regenerated accordingly.
+
+These additions make D4 a test of whether the submitted concept actually participates in the laws that earn the transfer score, rather than merely coexisting with successful predictions.

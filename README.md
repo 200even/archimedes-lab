@@ -51,3 +51,9 @@ The trusted runtime key used to select transfer challenges stays behind the Brok
 ### Condition blinding
 
 A pre-agent audit found that early development IDs encoded the seed and causal/Null condition. That would invalidate the Null-World false-positive test. V0.1.1 closes this route: benchmark bundles use opaque random world IDs and expose the same public `world_kind: experimental` for causal and Null worlds. Seed and true condition remain sealed evaluator metadata only. See the blinding amendment in `PRE_REGISTRATION_FREEZE.md`.
+
+### Deterministic theory use
+
+A second pre-agent audit closed a more serious loophole: Archimedes can no longer submit arbitrary transfer predictions under the name of a frozen theory. The Broker now deterministically evaluates the committed Theory AST, requires ≥90% visible fit in both A discovery and B calibration, freezes the A program as well as latent assignments, checks structurally disjoint A/B operator signatures, commits all theory-derived transfer predictions before observing any transfer outcome, and only then executes the 32 sealed measurements.
+
+This deterministic-use hardening is a **0.1.2 candidate** on `broker-hardening`; it is not authorized for a model experiment or merge to `main` until the referee ratifies `HARDENING_REVIEW.md`.

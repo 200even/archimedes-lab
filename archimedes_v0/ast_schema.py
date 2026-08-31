@@ -12,7 +12,7 @@ class VarExpr(StrictModel):
 
 class ConstExpr(StrictModel):
     kind: Literal["const"] = "const"
-    value: int
+    value: int = Field(ge=0, lt=DOMAIN_SIZE)
 
 class AddModExpr(StrictModel):
     kind: Literal["add_mod"] = "add_mod"
@@ -53,7 +53,6 @@ Expr = Annotated[
     Field(discriminator="kind"),
 ]
 
-# Rebuild recursive models.
 for cls in (AddModExpr, MulModExpr, XorExpr, RotlExpr, PermutationExpr):
     cls.model_rebuild()
 

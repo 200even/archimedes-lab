@@ -10,17 +10,26 @@ from typing import Any, Iterable
 
 from pydantic import ValidationError
 
-from .ast_schema import ExperimentAST, LatentVariable, TheoryAST
+from .ast_schema import ExperimentAST, Intervention, LatentVariable, TheoryAST, TheoryPrediction
 from .constants import (
     BROKER_BUDGET_TOTAL,
     BUDGET_A_DISCOVERY,
     BUDGET_B_CALIBRATION,
     BUDGET_B_TRANSFER_EVAL,
     D4_TRANSFER_ACCURACY_MIN,
+    D4_VISIBLE_FIT_ACCURACY_MIN,
     DOMAIN_SIZE,
     MAX_EPISTEMIC_CYCLES,
     NUM_ENTITIES,
     SCHEMA_VERSION,
+)
+from .theory_eval import (
+    TheoryEvaluationError,
+    operator_signature,
+    predict,
+    program_for,
+    score_observations,
+    validate_program_structure,
 )
 from .world import HiddenWorldRuntime
 
@@ -55,15 +64,11 @@ class TransferChallenge:
 
 
 @dataclass(frozen=True)
-class TransferReceipt:
-    experiment_id: str
-    challenge_id: str
-    accepted: bool = True
-
-
-@dataclass(frozen=True)
 class D4Result:
     theory_id: str
+    a_fit_accuracy: float
+    b_calibration_fit_accuracy: float
+    operator_diverse: bool
     correct: int
     total: int
     exact_accuracy: float
@@ -97,8 +102,7 @@ class HashChainLedger:
             "payload": payload,
             "prev_hash": prev_hash,
         }
-        digest = hashlib.sha256(self._canonical(body)).hexdigest()
-        record = {**body, "record_hash": digest}
+        record = {**body, "record_hash": hashlib.sha256(self._canonical(body)).hexdigest()}
         self._records.append(record)
         if self._path is not None:
             with self._path.open("a", encoding="utf-8") as fh:
@@ -121,10 +125,11 @@ class HashChainLedger:
 
 
 class ExperimentBroker:
-    """V0 epistemic boundary between agent-side code and a HiddenWorldRuntime.
+    """Trusted V0 boundary around the hidden runtime.
 
-    This class intentionally exposes no hidden spec, q assignment, generator seed,
-    program, measurement key, validation report, or unclosed transfer outcome.
+    The LLM must never receive this Python object. A trusted orchestrator may invoke
+    its public methods and pass only returned agent-safe values into stateless model
+    calls. Hidden runtime state and `trusted_ledger()` remain evaluator-side only.
     """
 
     def __init__(
@@ -148,16 +153,18 @@ class ExperimentBroker:
         self._ledger = HashChainLedger(ledger_path)
         self._seen_experiment_ids: set[str] = set()
         self._repetitions: dict[tuple[str, str, int], int] = {}
+        self._visible_observations: list[dict[str, Any]] = []
         self._a_count = 0
         self._b_cal_count = 0
         self._transfer_count = 0
         self._epistemic_cycles = 0
         self._frozen_theory: TheoryAST | None = None
         self._frozen_latent: LatentVariable | None = None
+        self._a_fit_accuracy: float | None = None
         self._b_theory: TheoryAST | None = None
+        self._b_fit_accuracy: float | None = None
+        self._operator_diverse = False
         self._transfer_challenges: tuple[TransferChallenge, ...] = ()
-        self._challenge_by_id: dict[str, TransferChallenge] = {}
-        self._completed_challenges: set[str] = set()
         self._transfer_outcomes: list[dict[str, Any]] = []
         self._closed_result: D4Result | None = None
 
@@ -178,7 +185,6 @@ class ExperimentBroker:
 
     @classmethod
     def from_generated_world(cls, public_world: Any, hidden_spec: Any, *, ledger_path: str | Path | None = None) -> "ExperimentBroker":
-        """Trusted-side convenience constructor. Never expose hidden_spec agent-side."""
         hidden = asdict(hidden_spec) if hasattr(hidden_spec, "__dataclass_fields__") else dict(hidden_spec)
         return cls(
             public_world,
@@ -191,6 +197,8 @@ class ExperimentBroker:
     def _validate_boundary_configuration(self) -> None:
         if self.public.get("schema_version") != SCHEMA_VERSION:
             raise BrokerError("public world schema version mismatch")
+        if self.public.get("world_kind") != "experimental":
+            raise BrokerError("agent-visible world condition must be blinded")
         if len(self._entities) != NUM_ENTITIES:
             raise BrokerError("unexpected entity count")
         if self._calibration_entities | self._transfer_entities != self._entities:
@@ -269,14 +277,12 @@ class ExperimentBroker:
             raise BrokerError("one prediction per theory_id")
         if any(tid not in exp.target_theory_ids for tid in pred_ids):
             raise BrokerError("prediction theory must be a target theory")
-        rule_ids = [r.theory_id for r in exp.falsification_rules]
-        if any(tid not in exp.target_theory_ids for tid in rule_ids):
+        if any(r.theory_id not in exp.target_theory_ids for r in exp.falsification_rules):
             raise BrokerError("falsification-rule theory must be a target theory")
 
     def run_visible_experiment(self, value: ExperimentAST | dict[str, Any]) -> Observation:
         exp = self._parse_experiment(value)
         self._validate_common_experiment(exp)
-
         if self._phase == Phase.A_DISCOVERY:
             if exp.paradigm != "A":
                 raise BrokerError("only Paradigm A is available during A discovery")
@@ -295,64 +301,56 @@ class ExperimentBroker:
         self._claim_experiment_id(exp.experiment_id)
         repetition = self._next_repetition(exp.paradigm, exp.intervention.entity_id, exp.intervention.action_value)
         y = self._runtime.observe(exp.paradigm, exp.intervention.entity_id, exp.intervention.action_value, repetition)
-        obs = Observation(
-            experiment_id=exp.experiment_id,
-            paradigm=exp.paradigm,
-            entity_id=exp.intervention.entity_id,
-            action_value=exp.intervention.action_value,
-            repetition=repetition,
-            y=y,
-        )
-
+        obs = Observation(exp.experiment_id, exp.paradigm, exp.intervention.entity_id, exp.intervention.action_value, repetition, y)
+        self._visible_observations.append(asdict(obs))
         if self._phase == Phase.A_DISCOVERY:
             self._a_count += 1
         else:
             self._b_cal_count += 1
-
         self._ledger.append(
             "visible_experiment",
-            {
-                "experiment": exp.model_dump(mode="json"),
-                "observation": asdict(obs),
-                "phase": self._phase.value,
-                "remaining_budget": self.remaining_budget,
-            },
+            {"experiment": exp.model_dump(mode="json"), "observation": asdict(obs), "phase": self._phase.value, "remaining_budget": self.remaining_budget},
         )
         return obs
-
-    def freeze_a_theory(self, value: TheoryAST | dict[str, Any]) -> TheoryAST:
-        if self._phase != Phase.A_DISCOVERY:
-            raise BrokerError("A theory can only be frozen after A discovery")
-        if self._a_count != BUDGET_A_DISCOVERY:
-            raise BrokerError(f"A theory freeze requires exactly {BUDGET_A_DISCOVERY} A interventions")
-
-        theory = self._parse_theory(value)
-        if len(theory.latent_variables) != 1:
-            raise BrokerError("V0 D4 candidate must contain exactly one latent variable")
-        if len(theory.programs) != 1 or theory.programs[0].paradigm != "A":
-            raise BrokerError("A freeze must contain exactly one Paradigm A program")
-        latent = theory.latent_variables[0]
-        if set(latent.assignments) != self._entities:
-            raise BrokerError("frozen latent assignments must cover every entity exactly once")
-
-        frozen_latent = latent.model_copy(update={"frozen": True})
-        frozen_theory = theory.model_copy(update={"latent_variables": [frozen_latent]})
-        self._frozen_latent = frozen_latent
-        self._frozen_theory = frozen_theory
-        self._phase = Phase.A_FROZEN
-        self._ledger.append(
-            "a_theory_frozen",
-            {
-                "theory": frozen_theory.model_dump(mode="json"),
-                "assignment_digest": self._assignment_digest(frozen_latent),
-            },
-        )
-        return frozen_theory
 
     @staticmethod
     def _assignment_digest(latent: LatentVariable) -> str:
         canonical = json.dumps(latent.assignments, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(canonical).hexdigest()
+
+    def freeze_a_theory(self, value: TheoryAST | dict[str, Any]) -> TheoryAST:
+        if self._phase != Phase.A_DISCOVERY or self._a_count != BUDGET_A_DISCOVERY:
+            raise BrokerError(f"A theory freeze requires exactly {BUDGET_A_DISCOVERY} A interventions")
+        theory = self._parse_theory(value)
+        if len(theory.latent_variables) != 1:
+            raise BrokerError("V0 D4 candidate must contain exactly one latent variable")
+        latent = theory.latent_variables[0]
+        if set(latent.assignments) != self._entities:
+            raise BrokerError("frozen latent assignments must cover every entity exactly once")
+        if set(latent.assignments.values()) != set(range(DOMAIN_SIZE)):
+            raise BrokerError("V0 categorical latent must use all declared states")
+        try:
+            a_program = program_for(theory, "A")
+            if len(theory.programs) != 1:
+                raise TheoryEvaluationError("A freeze must contain only the A program")
+            validate_program_structure(a_program, latent.name, "x")
+            fit = score_observations(theory, "A", self._visible_observations)
+        except TheoryEvaluationError as exc:
+            raise BrokerError(f"invalid A explanatory theory: {exc}") from exc
+        if fit.exact_accuracy < D4_VISIBLE_FIT_ACCURACY_MIN:
+            raise BrokerError(f"A theory fit {fit.exact_accuracy:.3f} is below frozen threshold {D4_VISIBLE_FIT_ACCURACY_MIN:.3f}")
+
+        frozen_latent = latent.model_copy(update={"frozen": True})
+        frozen_theory = theory.model_copy(update={"latent_variables": [frozen_latent]})
+        self._frozen_latent = frozen_latent
+        self._frozen_theory = frozen_theory
+        self._a_fit_accuracy = fit.exact_accuracy
+        self._phase = Phase.A_FROZEN
+        self._ledger.append(
+            "a_theory_frozen",
+            {"theory": frozen_theory.model_dump(mode="json"), "assignment_digest": self._assignment_digest(frozen_latent), "a_fit": asdict(fit)},
+        )
+        return frozen_theory
 
     def open_b_calibration(self) -> tuple[str, ...]:
         if self._phase != Phase.A_FROZEN:
@@ -363,34 +361,48 @@ class ExperimentBroker:
         return available
 
     def submit_b_theory(self, value: TheoryAST | dict[str, Any]) -> TheoryAST:
-        if self._phase != Phase.B_CALIBRATION:
-            raise BrokerError("B theory can only be submitted after B calibration")
-        if self._b_cal_count != BUDGET_B_CALIBRATION:
+        if self._phase != Phase.B_CALIBRATION or self._b_cal_count != BUDGET_B_CALIBRATION:
             raise BrokerError(f"B theory submission requires exactly {BUDGET_B_CALIBRATION} B calibration interventions")
         if self._frozen_theory is None or self._frozen_latent is None:
             raise BrokerError("internal freeze invariant violated")
-
         theory = self._parse_theory(value)
         if theory.theory_id != self._frozen_theory.theory_id:
             raise BrokerError("theory_id cannot change after A freeze")
-        if len(theory.latent_variables) != 1:
-            raise BrokerError("V0 D4 theory must retain exactly one latent variable")
-        candidate_latent = theory.latent_variables[0]
-        if candidate_latent.model_copy(update={"frozen": True}) != self._frozen_latent:
+        if len(theory.latent_variables) != 1 or theory.latent_variables[0].model_copy(update={"frozen": True}) != self._frozen_latent:
             raise BrokerError("frozen latent identity/assignments changed during B calibration")
-        paradigms = [p.paradigm for p in theory.programs]
-        if sorted(paradigms) != ["A", "B"] or len(set(paradigms)) != 2:
-            raise BrokerError("final D4 theory must contain exactly one A and one B program")
+        try:
+            a_program = program_for(theory, "A")
+            b_program = program_for(theory, "B")
+            if len(theory.programs) != 2:
+                raise TheoryEvaluationError("final D4 theory must contain exactly A and B programs")
+            if a_program != program_for(self._frozen_theory, "A"):
+                raise TheoryEvaluationError("frozen A explanatory program changed after B data")
+            validate_program_structure(b_program, self._frozen_latent.name, "u")
+            b_fit = score_observations(theory, "B", self._visible_observations)
+        except TheoryEvaluationError as exc:
+            raise BrokerError(f"invalid final D4 theory: {exc}") from exc
+        if b_fit.exact_accuracy < D4_VISIBLE_FIT_ACCURACY_MIN:
+            raise BrokerError(f"B calibration fit {b_fit.exact_accuracy:.3f} is below frozen threshold {D4_VISIBLE_FIT_ACCURACY_MIN:.3f}")
+
+        a_ops = operator_signature(a_program.expression)
+        b_ops = operator_signature(b_program.expression)
+        operator_diverse = bool(a_ops and b_ops and a_ops.isdisjoint(b_ops))
+        if not operator_diverse:
+            raise BrokerError(f"D4 operator-diversity criterion failed: A={sorted(a_ops)}, B={sorted(b_ops)}")
 
         self._b_theory = theory.model_copy(update={"latent_variables": [self._frozen_latent]})
+        self._b_fit_accuracy = b_fit.exact_accuracy
+        self._operator_diverse = True
         self._phase = Phase.B_TRANSFER
         self._transfer_challenges = self._build_transfer_challenges()
-        self._challenge_by_id = {c.challenge_id: c for c in self._transfer_challenges}
         self._ledger.append(
             "b_theory_committed",
             {
                 "theory": self._b_theory.model_dump(mode="json"),
                 "assignment_digest": self._assignment_digest(self._frozen_latent),
+                "b_calibration_fit": asdict(b_fit),
+                "operator_signature_A": sorted(a_ops),
+                "operator_signature_B": sorted(b_ops),
                 "transfer_challenges": [asdict(c) for c in self._transfer_challenges],
             },
         )
@@ -406,8 +418,7 @@ class ExperimentBroker:
                 scored.append((digest, action))
             chosen = sorted(action for _, action in sorted(scored)[:4])
             for action in chosen:
-                cid = f"C-{len(challenges):02d}"
-                challenges.append(TransferChallenge(cid, entity, action))
+                challenges.append(TransferChallenge(f"C-{len(challenges):02d}", entity, action))
         if len(challenges) != BUDGET_B_TRANSFER_EVAL:
             raise BrokerError("transfer challenge cardinality invariant violated")
         return tuple(challenges)
@@ -417,90 +428,79 @@ class ExperimentBroker:
             raise BrokerError("transfer challenge set is not available in this phase")
         return tuple(self._transfer_challenges)
 
-    def submit_transfer_prediction(self, challenge_id: str, value: ExperimentAST | dict[str, Any]) -> TransferReceipt:
-        if self._phase != Phase.B_TRANSFER:
-            raise BrokerError("transfer predictions are not accepted in this phase")
-        if self._b_theory is None:
-            raise BrokerError("internal B-theory invariant violated")
-        if challenge_id not in self._challenge_by_id:
-            raise BrokerError("unknown transfer challenge")
-        if challenge_id in self._completed_challenges:
-            raise BrokerError("transfer challenge already completed")
-        if self._transfer_count >= BUDGET_B_TRANSFER_EVAL:
-            raise BrokerError("transfer budget exhausted")
+    def execute_transfer_evaluation(self) -> D4Result:
+        """Commit theory-derived predictions, then unblind only to the trusted evaluator."""
+        if self._phase != Phase.B_TRANSFER or self._b_theory is None:
+            raise BrokerError("transfer evaluation is not available in this phase")
+        if self._transfer_count != 0:
+            raise BrokerError("transfer evaluation may execute only once")
 
-        exp = self._parse_experiment(value)
-        self._validate_common_experiment(exp)
-        challenge = self._challenge_by_id[challenge_id]
-        if exp.paradigm != "B":
-            raise BrokerError("transfer evaluation is Paradigm B only")
-        if exp.objective not in ("estimate", "discriminate"):
-            raise BrokerError("transfer prediction objective must be estimate or discriminate")
-        if exp.intervention.entity_id != challenge.entity_id or exp.intervention.action_value != challenge.action_value:
-            raise BrokerError("Experiment AST intervention does not match issued transfer challenge")
-        if exp.target_theory_ids != [self._b_theory.theory_id]:
-            raise BrokerError("transfer challenge must target only the frozen D4 theory")
-        if len(exp.predictions) != 1 or exp.predictions[0].theory_id != self._b_theory.theory_id:
-            raise BrokerError("transfer challenge requires exactly one frozen-theory prediction")
+        committed: list[dict[str, Any]] = []
+        for i, challenge in enumerate(self._transfer_challenges):
+            try:
+                predicted_y = predict(self._b_theory, "B", challenge.entity_id, challenge.action_value)
+            except TheoryEvaluationError as exc:
+                raise BrokerError(f"committed B theory cannot produce transfer prediction: {exc}") from exc
+            probs = [1.0 if y == predicted_y else 0.0 for y in range(DOMAIN_SIZE)]
+            exp = ExperimentAST(
+                experiment_id=f"E-TRANSFER-{i:02d}",
+                objective="estimate",
+                paradigm="B",
+                intervention=Intervention(entity_id=challenge.entity_id, action_value=challenge.action_value),
+                target_theory_ids=[self._b_theory.theory_id],
+                predictions=[TheoryPrediction(theory_id=self._b_theory.theory_id, categorical_probabilities=probs)],
+            )
+            self._claim_experiment_id(exp.experiment_id)
+            committed.append({"challenge_id": challenge.challenge_id, "experiment": exp.model_dump(mode="json"), "predicted_y": predicted_y})
 
-        probs = exp.predictions[0].categorical_probabilities
-        max_p = max(probs)
-        if sum(1 for p in probs if p == max_p) != 1:
-            raise BrokerError("transfer prediction must have a unique categorical argmax")
-        predicted_y = probs.index(max_p)
+        self._ledger.append("transfer_predictions_committed", {"predictions": committed})
 
-        self._claim_experiment_id(exp.experiment_id)
-        repetition = self._next_repetition("B", challenge.entity_id, challenge.action_value)
-        observed_y = self._runtime.observe("B", challenge.entity_id, challenge.action_value, repetition)
-        outcome = {
-            "challenge_id": challenge_id,
-            "experiment_id": exp.experiment_id,
-            "entity_id": challenge.entity_id,
-            "action_value": challenge.action_value,
-            "repetition": repetition,
-            "predicted_y": predicted_y,
-            "prediction_probabilities": list(probs),
-            "observed_y": observed_y,
-            "correct": predicted_y == observed_y,
-        }
-        self._transfer_outcomes.append(outcome)
-        self._completed_challenges.add(challenge_id)
-        self._transfer_count += 1
+        for item, challenge in zip(committed, self._transfer_challenges, strict=True):
+            repetition = self._next_repetition("B", challenge.entity_id, challenge.action_value)
+            observed_y = self._runtime.observe("B", challenge.entity_id, challenge.action_value, repetition)
+            predicted_y = item["predicted_y"]
+            outcome = {
+                "challenge_id": challenge.challenge_id,
+                "experiment_id": item["experiment"]["experiment_id"],
+                "entity_id": challenge.entity_id,
+                "action_value": challenge.action_value,
+                "repetition": repetition,
+                "predicted_y": predicted_y,
+                "observed_y": observed_y,
+                "correct": predicted_y == observed_y,
+            }
+            self._transfer_outcomes.append(outcome)
+            self._transfer_count += 1
+            self._ledger.append(
+                "sealed_transfer_observation",
+                {"challenge_id": challenge.challenge_id, "observation": {"repetition": repetition, "y": observed_y, "correct": predicted_y == observed_y}, "remaining_budget": self.remaining_budget},
+                sealed=True,
+            )
 
-        self._ledger.append(
-            "sealed_transfer_experiment",
-            {
-                "experiment": exp.model_dump(mode="json"),
-                "challenge_id": challenge_id,
-                "observation": {
-                    "repetition": repetition,
-                    "y": observed_y,
-                    "correct": predicted_y == observed_y,
-                },
-                "remaining_budget": self.remaining_budget,
-            },
-            sealed=True,
-        )
-        return TransferReceipt(exp.experiment_id, challenge_id)
+        return self._close_run()
 
-    def close_run(self) -> D4Result:
-        if self._phase != Phase.B_TRANSFER:
-            raise BrokerError("run may only close after transfer evaluation")
-        if self._transfer_count != BUDGET_B_TRANSFER_EVAL or len(self._completed_challenges) != BUDGET_B_TRANSFER_EVAL:
-            raise BrokerError(f"run closure requires all {BUDGET_B_TRANSFER_EVAL} transfer challenges")
-        if self.remaining_budget["total"] != 0:
+    def _close_run(self) -> D4Result:
+        if self._transfer_count != BUDGET_B_TRANSFER_EVAL or self.remaining_budget["total"] != 0:
             raise BrokerError("run closure requires exact exhaustion of the 128-intervention budget")
-        if self._b_theory is None:
-            raise BrokerError("internal D4 theory invariant violated")
-
+        if self._b_theory is None or self._a_fit_accuracy is None or self._b_fit_accuracy is None:
+            raise BrokerError("internal D4 scoring invariant violated")
         correct = sum(int(o["correct"]) for o in self._transfer_outcomes)
         accuracy = correct / BUDGET_B_TRANSFER_EVAL
+        qualifies = (
+            self._a_fit_accuracy >= D4_VISIBLE_FIT_ACCURACY_MIN
+            and self._b_fit_accuracy >= D4_VISIBLE_FIT_ACCURACY_MIN
+            and self._operator_diverse
+            and accuracy >= D4_TRANSFER_ACCURACY_MIN
+        )
         result = D4Result(
             theory_id=self._b_theory.theory_id,
+            a_fit_accuracy=self._a_fit_accuracy,
+            b_calibration_fit_accuracy=self._b_fit_accuracy,
+            operator_diverse=self._operator_diverse,
             correct=correct,
             total=BUDGET_B_TRANSFER_EVAL,
             exact_accuracy=accuracy,
-            qualifies=accuracy >= D4_TRANSFER_ACCURACY_MIN,
+            qualifies=qualifies,
         )
         self._closed_result = result
         self._phase = Phase.CLOSED
@@ -511,14 +511,7 @@ class ExperimentBroker:
         records = []
         for record in self._ledger.snapshot():
             if record["sealed"] and self._phase != Phase.CLOSED:
-                payload = record["payload"]
-                exp = payload["experiment"]
-                record["payload"] = {
-                    "experiment": exp,
-                    "challenge_id": payload["challenge_id"],
-                    "observation": "SEALED_UNTIL_RUN_CLOSE",
-                    "remaining_budget": payload["remaining_budget"],
-                }
+                record["payload"] = {"observation": "SEALED_UNTIL_RUN_CLOSE"}
                 record["projection_note"] = "sealed payload redacted; verify trusted ledger after close"
             records.append(record)
         return tuple(records)
