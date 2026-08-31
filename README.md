@@ -51,3 +51,9 @@ The trusted runtime key used to select transfer challenges stays behind the Brok
 ### Condition blinding
 
 A pre-agent audit found that early development IDs encoded the seed and causal/Null condition. That would invalidate the Null-World false-positive test. V0.1.1 closes this route: benchmark bundles use opaque random world IDs and expose the same public `world_kind: experimental` for causal and Null worlds. Seed and true condition remain sealed evaluator metadata only. See the blinding amendment in `PRE_REGISTRATION_FREEZE.md`.
+
+### Theory-grounded D4 scoring
+
+V0.1.2 adds a deterministic theory evaluator between the model and the transfer score. A and B explanatory programs must clear the frozen 0.90 visible-fit gates, obey the depth-6 complexity bound, and use disjoint nontrivial operator signatures. The Broker then derives all 32 sealed transfer predictions directly from the committed Theory AST and frozen latent assignments; an agent cannot bypass its stated theory by submitting ad hoc transfer guesses.
+
+The Broker also exposes a condition-blind `declare_no_concept()` path after the 64 A interventions. This is necessary for a meaningful Null-World false-positive test: abstention is allowed in every world, closes the run irreversibly, and forfeits the remaining budget.
