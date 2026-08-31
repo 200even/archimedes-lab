@@ -1,0 +1,14 @@
+{
+  "status": "FROZEN_BEFORE_QUALIFICATION_EXECUTION",
+  "corpus_size": 1000,
+  "corpus_seed": "archimedes-v0-qualification-20260831",
+  "corpus_digest_sha256": "e5a643f5b7bf4c9c69297108a9ad4fa29569ca52152de40a2449b98e9c998400",
+  "grammar_max_depth": 5,
+  "synthesizer_max_depth": 6,
+  "qualification_endpoint": "complete 8x8 observational equivalence",
+  "recovery_threshold": 0.95,
+  "search_ceiling_ladder": [256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536],
+  "selection_rule": "Select the smallest preregistered ceiling with recovery_rate >= 0.95. If none qualifies through 65536, do not extend the ladder without a new referee ruling.",
+  "hidden_world_generator_access": false,
+  "latent_partition_search": false
+}
