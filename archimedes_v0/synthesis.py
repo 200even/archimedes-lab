@@ -70,12 +70,11 @@ class ProgramSearchResult:
 
 @dataclass
 class _Node:
-    expression: object
+    spec: tuple
     signature: bytes
     correct: int
     node_count: int
     depth: int
-    canonical: str
 
 
 class CandidateSynthesizer(Protocol):
@@ -98,26 +97,35 @@ class CandidateSynthesizer(Protocol):
         ...
 
 
+def _spec_to_ast(spec: tuple):
+    kind = spec[0]
+    if kind == "var":
+        return VarExpr(name=spec[1])
+    if kind == "const":
+        return ConstExpr(value=spec[1])
+    if kind == "rotl":
+        return RotlExpr(shift=spec[1], value=_spec_to_ast(spec[2]))
+    if kind == "permute":
+        return PermutationExpr(mapping=list(spec[1]), value=_spec_to_ast(spec[2]))
+
+    left = _spec_to_ast(spec[1])
+    right = _spec_to_ast(spec[2])
+    constructors = {
+        "add_mod": AddModExpr,
+        "mul_mod": MulModExpr,
+        "xor": XorExpr,
+        "bit_and": BitAndExpr,
+        "bit_or": BitOrExpr,
+        "min_u3": MinU3Expr,
+        "max_u3": MaxU3Expr,
+        "abs_diff": AbsDiffExpr,
+        "eq_mask": EqMaskExpr,
+    }
+    return constructors[kind](left=left, right=right)
+
+
 def _canonical(expression: object) -> str:
     return json.dumps(expression.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
-
-
-def _node_count(expression: object) -> int:
-    kind = expression.kind
-    if kind in {"var", "const"}:
-        return 1
-    if kind in {"rotl", "permute"}:
-        return 1 + _node_count(expression.value)
-    return 1 + _node_count(expression.left) + _node_count(expression.right)
-
-
-def _expression_depth(expression: object) -> int:
-    kind = expression.kind
-    if kind in {"var", "const"}:
-        return 1
-    if kind in {"rotl", "permute"}:
-        return 1 + _expression_depth(expression.value)
-    return 1 + max(_expression_depth(expression.left), _expression_depth(expression.right))
 
 
 def _rotl(value: int, shift: int) -> int:
@@ -144,21 +152,6 @@ def _apply_binary(kind: str, left: bytes, right: bytes) -> bytes:
     if kind == "eq_mask":
         return bytes(7 if a == b else 0 for a, b in zip(left, right, strict=True))
     raise ValueError(f"unsupported binary operator {kind}")
-
-
-def _binary_expression(kind: str, left: object, right: object):
-    constructors = {
-        "add_mod": AddModExpr,
-        "mul_mod": MulModExpr,
-        "xor": XorExpr,
-        "bit_and": BitAndExpr,
-        "bit_or": BitOrExpr,
-        "min_u3": MinU3Expr,
-        "max_u3": MaxU3Expr,
-        "abs_diff": AbsDiffExpr,
-        "eq_mask": EqMaskExpr,
-    }
-    return constructors[kind](left=left, right=right)
 
 
 def _best_permutation(signature: bytes, observations: tuple[tuple[int, int], ...]) -> tuple[int, ...]:
@@ -235,40 +228,37 @@ class EnumerativeProgramSearch:
         def score(signature: bytes) -> int:
             return sum(signature[index] == y for index, y in indexed_observations)
 
-        def add(expression: object, signature: bytes) -> _Node | None:
+        def add(spec: tuple, signature: bytes, *, node_count: int, depth: int) -> _Node | None:
             nonlocal inspected
             if len(signature) != table_size:
                 raise AssertionError("semantic signature length mismatch")
-            node_count = _node_count(expression)
-            depth = _expression_depth(expression)
-            canonical = _canonical(expression)
             existing = seen.get(signature)
             if existing is not None:
-                if (node_count, depth, canonical) < (existing.node_count, existing.depth, existing.canonical):
-                    existing.expression = expression
+                if (node_count, depth, spec) < (existing.node_count, existing.depth, existing.spec):
+                    existing.spec = spec
                     existing.node_count = node_count
                     existing.depth = depth
-                    existing.canonical = canonical
                 return None
             if inspected >= self.search_ceiling:
                 return None
             inspected += 1
             node = _Node(
-                expression=expression,
+                spec=spec,
                 signature=signature,
                 correct=score(signature),
                 node_count=node_count,
                 depth=depth,
-                canonical=canonical,
             )
             seen[signature] = node
             return node
 
         points = tuple((q, action) for q in range(q_cardinality) for action in range(DOMAIN_SIZE))
-        add(VarExpr(name=latent_name), bytes(q for q, _ in points))
-        add(VarExpr(name=action_name), bytes(action for _, action in points))
+        latent_signature = bytes(q for q, _ in points)
+        action_signature = bytes(action for _, action in points)
+        add(("var", latent_name), latent_signature, node_count=1, depth=1)
+        add(("var", action_name), action_signature, node_count=1, depth=1)
         for value in range(DOMAIN_SIZE):
-            add(ConstExpr(value=value), bytes([value]) * table_size)
+            add(("const", value), bytes([value]) * table_size, node_count=1, depth=1)
 
         def add_best_permutation(node: _Node) -> None:
             if node.depth >= self.max_depth or inspected >= self.search_ceiling:
@@ -277,7 +267,12 @@ class EnumerativeProgramSearch:
             if mapping == tuple(range(DOMAIN_SIZE)):
                 return
             signature = bytes(mapping[value] for value in node.signature)
-            add(PermutationExpr(value=node.expression, mapping=list(mapping)), signature)
+            add(
+                ("permute", mapping, node.spec),
+                signature,
+                node_count=node.node_count + 1,
+                depth=node.depth + 1,
+            )
 
         for node in tuple(seen.values()):
             add_best_permutation(node)
@@ -292,9 +287,23 @@ class EnumerativeProgramSearch:
                 break
             ranked = sorted(
                 seen.values(),
-                key=lambda node: (-node.correct, node.node_count, node.depth, node.canonical),
+                key=lambda node: (-node.correct, node.node_count, node.depth, node.spec),
             )
-            beam = ranked[:beam_width]
+
+            anchors = [
+                node
+                for signature in (latent_signature, action_signature)
+                if (node := seen.get(signature)) is not None
+            ]
+            beam: list[_Node] = []
+            beam_signatures: set[bytes] = set()
+            for node in anchors + ranked:
+                if node.signature in beam_signatures:
+                    continue
+                beam.append(node)
+                beam_signatures.add(node.signature)
+                if len(beam) >= beam_width:
+                    break
 
             for node in beam:
                 if inspected >= self.search_ceiling:
@@ -303,7 +312,12 @@ class EnumerativeProgramSearch:
                     continue
                 for shift in (1, 2):
                     signature = bytes(_rotl(value, shift) for value in node.signature)
-                    added = add(RotlExpr(value=node.expression, shift=shift), signature)
+                    added = add(
+                        ("rotl", shift, node.spec),
+                        signature,
+                        node_count=node.node_count + 1,
+                        depth=node.depth + 1,
+                    )
                     if added is not None:
                         add_best_permutation(added)
                     if inspected >= self.search_ceiling:
@@ -317,11 +331,17 @@ class EnumerativeProgramSearch:
                     if inspected >= self.search_ceiling:
                         break
                     for right in beam:
-                        if 1 + max(left.depth, right.depth) > self.max_depth:
+                        depth = 1 + max(left.depth, right.depth)
+                        if depth > self.max_depth:
                             continue
                         signature = _apply_binary(kind, left.signature, right.signature)
-                        expression = _binary_expression(kind, left.expression, right.expression)
-                        added = add(expression, signature)
+                        node_count = left.node_count + right.node_count + 1
+                        added = add(
+                            (kind, left.spec, right.spec),
+                            signature,
+                            node_count=node_count,
+                            depth=depth,
+                        )
                         if added is not None:
                             add_best_permutation(added)
                         if inspected >= self.search_ceiling:
@@ -330,23 +350,25 @@ class EnumerativeProgramSearch:
         total = len(observations)
         ranked = sorted(
             seen.values(),
-            key=lambda node: (-node.correct, node.node_count, node.depth, node.canonical),
+            key=lambda node: (-node.correct, node.node_count, node.depth, node.spec),
         )
-        candidates = tuple(
-            ProgramCandidate(
-                expression=node.expression,
-                truth_table=tuple(node.signature),
-                correct=node.correct,
-                total=total,
-                exact_accuracy=(node.correct / total) if total else 0.0,
-                node_count=node.node_count,
-                depth=node.depth,
-                canonical_ast=node.canonical,
+        candidates: list[ProgramCandidate] = []
+        for node in ranked[:limit]:
+            expression = _spec_to_ast(node.spec)
+            candidates.append(
+                ProgramCandidate(
+                    expression=expression,
+                    truth_table=tuple(node.signature),
+                    correct=node.correct,
+                    total=total,
+                    exact_accuracy=(node.correct / total) if total else 0.0,
+                    node_count=node.node_count,
+                    depth=node.depth,
+                    canonical_ast=_canonical(expression),
+                )
             )
-            for node in ranked[:limit]
-        )
         return ProgramSearchResult(
-            candidates=candidates,
+            candidates=tuple(candidates),
             semantic_expressions_inspected=inspected,
             beam_width=beam_width,
             search_ceiling=self.search_ceiling,
