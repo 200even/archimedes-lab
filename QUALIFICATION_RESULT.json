@@ -1,0 +1,20 @@
+{
+  "workflow_run_id": 33358350725,
+  "workflow_head_sha": "b085a0988eb88f45b4fd6da6a441fd3e6ba2ed94",
+  "qualification_corpus_digest_sha256": "e5a643f5b7bf4c9c69297108a9ad4fa29569ca52152de40a2449b98e9c998400",
+  "selection_rule": "smallest preregistered ceiling with complete recovery_rate >= 0.95",
+  "results": [
+    {"ceiling": 256, "count": 1000, "recovered": 546, "recovery_rate": 0.546},
+    {"ceiling": 512, "count": 1000, "recovered": 546, "recovery_rate": 0.546},
+    {"ceiling": 1024, "count": 1000, "recovered": 546, "recovery_rate": 0.546},
+    {"ceiling": 2048, "count": 1000, "recovered": 689, "recovery_rate": 0.689},
+    {"ceiling": 4096, "count": 1000, "recovered": 772, "recovery_rate": 0.772},
+    {"ceiling": 8192, "count": 1000, "recovered": 808, "recovery_rate": 0.808},
+    {"ceiling": 16384, "count": 1000, "recovered": 815, "recovery_rate": 0.815},
+    {"ceiling": 32768, "count": 1000, "recovered": 821, "recovery_rate": 0.821},
+    {"ceiling": 65536, "count": 1000, "recovered": 826, "recovery_rate": 0.826}
+  ],
+  "selected_search_ceiling": null,
+  "status": "NO_CEILING_QUALIFIED",
+  "benchmark_exposure_occurred": false
+}
