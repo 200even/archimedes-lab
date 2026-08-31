@@ -4,9 +4,15 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from .ast_schema import (
+    AbsDiffExpr,
     AddModExpr,
+    BitAndExpr,
+    BitOrExpr,
     ConstExpr,
+    EqMaskExpr,
     Expr,
+    MaxU3Expr,
+    MinU3Expr,
     MulModExpr,
     PermutationExpr,
     ProgramSpec,
@@ -48,6 +54,18 @@ def evaluate_expr(expr: Expr, env: dict[str, int]) -> int:
         if not 0 <= child < DOMAIN_SIZE:
             raise TheoryEvaluationError("permutation input outside V0 domain")
         value = expr.mapping[child]
+    elif isinstance(expr, BitAndExpr):
+        value = evaluate_expr(expr.left, env) & evaluate_expr(expr.right, env)
+    elif isinstance(expr, BitOrExpr):
+        value = evaluate_expr(expr.left, env) | evaluate_expr(expr.right, env)
+    elif isinstance(expr, MinU3Expr):
+        value = min(evaluate_expr(expr.left, env), evaluate_expr(expr.right, env))
+    elif isinstance(expr, MaxU3Expr):
+        value = max(evaluate_expr(expr.left, env), evaluate_expr(expr.right, env))
+    elif isinstance(expr, AbsDiffExpr):
+        value = abs(evaluate_expr(expr.left, env) - evaluate_expr(expr.right, env))
+    elif isinstance(expr, EqMaskExpr):
+        value = (DOMAIN_SIZE - 1) if evaluate_expr(expr.left, env) == evaluate_expr(expr.right, env) else 0
     else:  # pragma: no cover - protected by the discriminated schema
         raise TheoryEvaluationError(f"unsupported expression type {type(expr)!r}")
 
@@ -61,7 +79,7 @@ def variables_used(expr: Expr) -> frozenset[str]:
         return frozenset([expr.name])
     if isinstance(expr, ConstExpr):
         return frozenset()
-    if isinstance(expr, (AddModExpr, MulModExpr, XorExpr)):
+    if isinstance(expr, (AddModExpr, MulModExpr, XorExpr, BitAndExpr, BitOrExpr, MinU3Expr, MaxU3Expr, AbsDiffExpr, EqMaskExpr)):
         return variables_used(expr.left) | variables_used(expr.right)
     if isinstance(expr, (RotlExpr, PermutationExpr)):
         return variables_used(expr.value)
@@ -69,12 +87,7 @@ def variables_used(expr: Expr) -> frozenset[str]:
 
 
 def operator_signature(expr: Expr) -> frozenset[str]:
-    """Nontrivial operator kinds, ignoring variables/constants/final relabeling.
-
-    `permute` is deliberately omitted because a random categorical relabeling is a
-    representation wrapper rather than the interaction family used for the D4
-    operator-diversity test.
-    """
+    """Return nontrivial operator kinds, ignoring variables/constants/final relabeling."""
     if isinstance(expr, (VarExpr, ConstExpr)):
         return frozenset()
     if isinstance(expr, AddModExpr):
@@ -87,13 +100,25 @@ def operator_signature(expr: Expr) -> frozenset[str]:
         return frozenset(["rotl"]) | operator_signature(expr.value)
     if isinstance(expr, PermutationExpr):
         return operator_signature(expr.value)
+    if isinstance(expr, BitAndExpr):
+        return frozenset(["bit_and"]) | operator_signature(expr.left) | operator_signature(expr.right)
+    if isinstance(expr, BitOrExpr):
+        return frozenset(["bit_or"]) | operator_signature(expr.left) | operator_signature(expr.right)
+    if isinstance(expr, MinU3Expr):
+        return frozenset(["min_u3"]) | operator_signature(expr.left) | operator_signature(expr.right)
+    if isinstance(expr, MaxU3Expr):
+        return frozenset(["max_u3"]) | operator_signature(expr.left) | operator_signature(expr.right)
+    if isinstance(expr, AbsDiffExpr):
+        return frozenset(["abs_diff"]) | operator_signature(expr.left) | operator_signature(expr.right)
+    if isinstance(expr, EqMaskExpr):
+        return frozenset(["eq_mask"]) | operator_signature(expr.left) | operator_signature(expr.right)
     raise TheoryEvaluationError(f"unsupported expression type {type(expr)!r}")
 
 
 def expression_depth(expr: Expr) -> int:
     if isinstance(expr, (VarExpr, ConstExpr)):
         return 1
-    if isinstance(expr, (AddModExpr, MulModExpr, XorExpr)):
+    if isinstance(expr, (AddModExpr, MulModExpr, XorExpr, BitAndExpr, BitOrExpr, MinU3Expr, MaxU3Expr, AbsDiffExpr, EqMaskExpr)):
         return 1 + max(expression_depth(expr.left), expression_depth(expr.right))
     if isinstance(expr, (RotlExpr, PermutationExpr)):
         return 1 + expression_depth(expr.value)
@@ -107,7 +132,7 @@ def validate_program_structure(program: ProgramSpec, latent_name: str, action_na
     if unknown:
         raise TheoryEvaluationError(f"program uses unknown variables: {sorted(unknown)}")
     if latent_name not in vars_used:
-        raise TheoryEvaluationError("program does not use the frozen latent concept")
+        raise TheoryEvaluationError("program does not use the frozen latent representation")
     if action_name not in vars_used:
         raise TheoryEvaluationError("program does not use the intervention variable")
     if not operator_signature(program.expression):
