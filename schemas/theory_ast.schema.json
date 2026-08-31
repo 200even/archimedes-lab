@@ -1,0 +1,113 @@
+{
+  "$defs": {
+    "AddModExpr": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"const": "add_mod", "default": "add_mod", "title": "Kind", "type": "string"},
+        "left": {"discriminator": {"mapping": {"add_mod": "#/$defs/AddModExpr", "const": "#/$defs/ConstExpr", "mul_mod": "#/$defs/MulModExpr", "permute": "#/$defs/PermutationExpr", "rotl": "#/$defs/RotlExpr", "var": "#/$defs/VarExpr", "xor": "#/$defs/XorExpr"}, "propertyName": "kind"}, "oneOf": [{"$ref": "#/$defs/VarExpr"}, {"$ref": "#/$defs/ConstExpr"}, {"$ref": "#/$defs/AddModExpr"}, {"$ref": "#/$defs/MulModExpr"}, {"$ref": "#/$defs/XorExpr"}, {"$ref": "#/$defs/RotlExpr"}, {"$ref": "#/$defs/PermutationExpr"}], "title": "Left"},
+        "modulus": {"const": 8, "default": 8, "title": "Modulus", "type": "integer"},
+        "right": {"discriminator": {"mapping": {"add_mod": "#/$defs/AddModExpr", "const": "#/$defs/ConstExpr", "mul_mod": "#/$defs/MulModExpr", "permute": "#/$defs/PermutationExpr", "rotl": "#/$defs/RotlExpr", "var": "#/$defs/VarExpr", "xor": "#/$defs/XorExpr"}, "propertyName": "kind"}, "oneOf": [{"$ref": "#/$defs/VarExpr"}, {"$ref": "#/$defs/ConstExpr"}, {"$ref": "#/$defs/AddModExpr"}, {"$ref": "#/$defs/MulModExpr"}, {"$ref": "#/$defs/XorExpr"}, {"$ref": "#/$defs/RotlExpr"}, {"$ref": "#/$defs/PermutationExpr"}], "title": "Right"}
+      },
+      "required": ["left", "right"],
+      "title": "AddModExpr",
+      "type": "object"
+    },
+    "ConstExpr": {
+      "additionalProperties": false,
+      "properties": {"kind": {"const": "const", "default": "const", "title": "Kind", "type": "string"}, "value": {"title": "Value", "type": "integer"}},
+      "required": ["value"],
+      "title": "ConstExpr",
+      "type": "object"
+    },
+    "LatentVariable": {
+      "additionalProperties": false,
+      "properties": {
+        "assignments": {"additionalProperties": {"type": "integer"}, "title": "Assignments", "type": "object"},
+        "cardinality": {"const": 8, "default": 8, "title": "Cardinality", "type": "integer"},
+        "domain_kind": {"const": "categorical", "default": "categorical", "title": "Domain Kind", "type": "string"},
+        "frozen": {"default": false, "title": "Frozen", "type": "boolean"},
+        "name": {"pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$", "title": "Name", "type": "string"},
+        "scope": {"const": "entity", "default": "entity", "title": "Scope", "type": "string"}
+      },
+      "required": ["name", "assignments"],
+      "title": "LatentVariable",
+      "type": "object"
+    },
+    "MulModExpr": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"const": "mul_mod", "default": "mul_mod", "title": "Kind", "type": "string"},
+        "left": {"discriminator": {"mapping": {"add_mod": "#/$defs/AddModExpr", "const": "#/$defs/ConstExpr", "mul_mod": "#/$defs/MulModExpr", "permute": "#/$defs/PermutationExpr", "rotl": "#/$defs/RotlExpr", "var": "#/$defs/VarExpr", "xor": "#/$defs/XorExpr"}, "propertyName": "kind"}, "oneOf": [{"$ref": "#/$defs/VarExpr"}, {"$ref": "#/$defs/ConstExpr"}, {"$ref": "#/$defs/AddModExpr"}, {"$ref": "#/$defs/MulModExpr"}, {"$ref": "#/$defs/XorExpr"}, {"$ref": "#/$defs/RotlExpr"}, {"$ref": "#/$defs/PermutationExpr"}], "title": "Left"},
+        "modulus": {"const": 8, "default": 8, "title": "Modulus", "type": "integer"},
+        "right": {"discriminator": {"mapping": {"add_mod": "#/$defs/AddModExpr", "const": "#/$defs/ConstExpr", "mul_mod": "#/$defs/MulModExpr", "permute": "#/$defs/PermutationExpr", "rotl": "#/$defs/RotlExpr", "var": "#/$defs/VarExpr", "xor": "#/$defs/XorExpr"}, "propertyName": "kind"}, "oneOf": [{"$ref": "#/$defs/VarExpr"}, {"$ref": "#/$defs/ConstExpr"}, {"$ref": "#/$defs/AddModExpr"}, {"$ref": "#/$defs/MulModExpr"}, {"$ref": "#/$defs/XorExpr"}, {"$ref": "#/$defs/RotlExpr"}, {"$ref": "#/$defs/PermutationExpr"}], "title": "Right"}
+      },
+      "required": ["left", "right"],
+      "title": "MulModExpr",
+      "type": "object"
+    },
+    "PermutationExpr": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"const": "permute", "default": "permute", "title": "Kind", "type": "string"},
+        "mapping": {"items": {"type": "integer"}, "maxItems": 8, "minItems": 8, "title": "Mapping", "type": "array"},
+        "value": {"discriminator": {"mapping": {"add_mod": "#/$defs/AddModExpr", "const": "#/$defs/ConstExpr", "mul_mod": "#/$defs/MulModExpr", "permute": "#/$defs/PermutationExpr", "rotl": "#/$defs/RotlExpr", "var": "#/$defs/VarExpr", "xor": "#/$defs/XorExpr"}, "propertyName": "kind"}, "oneOf": [{"$ref": "#/$defs/VarExpr"}, {"$ref": "#/$defs/ConstExpr"}, {"$ref": "#/$defs/AddModExpr"}, {"$ref": "#/$defs/MulModExpr"}, {"$ref": "#/$defs/XorExpr"}, {"$ref": "#/$defs/RotlExpr"}, {"$ref": "#/$defs/PermutationExpr"}], "title": "Value"}
+      },
+      "required": ["value", "mapping"],
+      "title": "PermutationExpr",
+      "type": "object"
+    },
+    "ProgramSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "expression": {"discriminator": {"mapping": {"add_mod": "#/$defs/AddModExpr", "const": "#/$defs/ConstExpr", "mul_mod": "#/$defs/MulModExpr", "permute": "#/$defs/PermutationExpr", "rotl": "#/$defs/RotlExpr", "var": "#/$defs/VarExpr", "xor": "#/$defs/XorExpr"}, "propertyName": "kind"}, "oneOf": [{"$ref": "#/$defs/VarExpr"}, {"$ref": "#/$defs/ConstExpr"}, {"$ref": "#/$defs/AddModExpr"}, {"$ref": "#/$defs/MulModExpr"}, {"$ref": "#/$defs/XorExpr"}, {"$ref": "#/$defs/RotlExpr"}, {"$ref": "#/$defs/PermutationExpr"}], "title": "Expression"},
+        "output_name": {"const": "y", "default": "y", "title": "Output Name", "type": "string"},
+        "paradigm": {"enum": ["A", "B"], "title": "Paradigm", "type": "string"}
+      },
+      "required": ["paradigm", "expression"],
+      "title": "ProgramSpec",
+      "type": "object"
+    },
+    "RotlExpr": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"const": "rotl", "default": "rotl", "title": "Kind", "type": "string"},
+        "shift": {"enum": [1, 2], "title": "Shift", "type": "integer"},
+        "value": {"discriminator": {"mapping": {"add_mod": "#/$defs/AddModExpr", "const": "#/$defs/ConstExpr", "mul_mod": "#/$defs/MulModExpr", "permute": "#/$defs/PermutationExpr", "rotl": "#/$defs/RotlExpr", "var": "#/$defs/VarExpr", "xor": "#/$defs/XorExpr"}, "propertyName": "kind"}, "oneOf": [{"$ref": "#/$defs/VarExpr"}, {"$ref": "#/$defs/ConstExpr"}, {"$ref": "#/$defs/AddModExpr"}, {"$ref": "#/$defs/MulModExpr"}, {"$ref": "#/$defs/XorExpr"}, {"$ref": "#/$defs/RotlExpr"}, {"$ref": "#/$defs/PermutationExpr"}], "title": "Value"},
+        "width": {"const": 3, "default": 3, "title": "Width", "type": "integer"}
+      },
+      "required": ["value", "shift"],
+      "title": "RotlExpr",
+      "type": "object"
+    },
+    "VarExpr": {
+      "additionalProperties": false,
+      "properties": {"kind": {"const": "var", "default": "var", "title": "Kind", "type": "string"}, "name": {"maxLength": 64, "minLength": 1, "title": "Name", "type": "string"}},
+      "required": ["name"],
+      "title": "VarExpr",
+      "type": "object"
+    },
+    "XorExpr": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {"const": "xor", "default": "xor", "title": "Kind", "type": "string"},
+        "left": {"discriminator": {"mapping": {"add_mod": "#/$defs/AddModExpr", "const": "#/$defs/ConstExpr", "mul_mod": "#/$defs/MulModExpr", "permute": "#/$defs/PermutationExpr", "rotl": "#/$defs/RotlExpr", "var": "#/$defs/VarExpr", "xor": "#/$defs/XorExpr"}, "propertyName": "kind"}, "oneOf": [{"$ref": "#/$defs/VarExpr"}, {"$ref": "#/$defs/ConstExpr"}, {"$ref": "#/$defs/AddModExpr"}, {"$ref": "#/$defs/MulModExpr"}, {"$ref": "#/$defs/XorExpr"}, {"$ref": "#/$defs/RotlExpr"}, {"$ref": "#/$defs/PermutationExpr"}], "title": "Left"},
+        "right": {"discriminator": {"mapping": {"add_mod": "#/$defs/AddModExpr", "const": "#/$defs/ConstExpr", "mul_mod": "#/$defs/MulModExpr", "permute": "#/$defs/PermutationExpr", "rotl": "#/$defs/RotlExpr", "var": "#/$defs/VarExpr", "xor": "#/$defs/XorExpr"}, "propertyName": "kind"}, "oneOf": [{"$ref": "#/$defs/VarExpr"}, {"$ref": "#/$defs/ConstExpr"}, {"$ref": "#/$defs/AddModExpr"}, {"$ref": "#/$defs/MulModExpr"}, {"$ref": "#/$defs/XorExpr"}, {"$ref": "#/$defs/RotlExpr"}, {"$ref": "#/$defs/PermutationExpr"}], "title": "Right"}
+      },
+      "required": ["left", "right"],
+      "title": "XorExpr",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "evidence_experiment_ids": {"items": {"type": "string"}, "maxItems": 512, "title": "Evidence Experiment Ids", "type": "array"},
+    "latent_variables": {"items": {"$ref": "#/$defs/LatentVariable"}, "maxItems": 4, "title": "Latent Variables", "type": "array"},
+    "programs": {"items": {"$ref": "#/$defs/ProgramSpec"}, "maxItems": 2, "title": "Programs", "type": "array"},
+    "schema_version": {"const": "0.1.0", "default": "0.1.0", "title": "Schema Version", "type": "string"},
+    "status": {"default": "candidate", "enum": ["candidate", "surviving", "falsified"], "title": "Status", "type": "string"},
+    "theory_id": {"pattern": "^T-[A-Za-z0-9_-]{1,48}$", "title": "Theory Id", "type": "string"}
+  },
+  "required": ["theory_id", "latent_variables", "programs"],
+  "title": "TheoryAST",
+  "type": "object"
+}

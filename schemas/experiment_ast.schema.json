@@ -1,0 +1,146 @@
+{
+  "$defs": {
+    "FalsificationRule": {
+      "additionalProperties": false,
+      "properties": {
+        "metric": {
+          "const": "categorical_nll",
+          "default": "categorical_nll",
+          "title": "Metric",
+          "type": "string"
+        },
+        "theory_id": {
+          "pattern": "^T-[A-Za-z0-9_-]{1,48}$",
+          "title": "Theory Id",
+          "type": "string"
+        },
+        "threshold": {
+          "exclusiveMinimum": 0,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "theory_id",
+        "threshold"
+      ],
+      "title": "FalsificationRule",
+      "type": "object"
+    },
+    "Intervention": {
+      "additionalProperties": false,
+      "properties": {
+        "action_value": {
+          "exclusiveMaximum": 8,
+          "minimum": 0,
+          "title": "Action Value",
+          "type": "integer"
+        },
+        "entity_id": {
+          "pattern": "^entity_[0-9]{2}$",
+          "title": "Entity Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity_id",
+        "action_value"
+      ],
+      "title": "Intervention",
+      "type": "object"
+    },
+    "TheoryPrediction": {
+      "additionalProperties": false,
+      "properties": {
+        "categorical_probabilities": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 8,
+          "minItems": 8,
+          "title": "Categorical Probabilities",
+          "type": "array"
+        },
+        "theory_id": {
+          "pattern": "^T-[A-Za-z0-9_-]{1,48}$",
+          "title": "Theory Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "theory_id",
+        "categorical_probabilities"
+      ],
+      "title": "TheoryPrediction",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "experiment_id": {
+      "pattern": "^E-[A-Za-z0-9_-]{1,48}$",
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "falsification_rules": {
+      "items": {
+        "$ref": "#/$defs/FalsificationRule"
+      },
+      "maxItems": 16,
+      "title": "Falsification Rules",
+      "type": "array"
+    },
+    "intervention": {
+      "$ref": "#/$defs/Intervention"
+    },
+    "objective": {
+      "enum": [
+        "discriminate",
+        "falsify",
+        "estimate"
+      ],
+      "title": "Objective",
+      "type": "string"
+    },
+    "paradigm": {
+      "enum": [
+        "A",
+        "B"
+      ],
+      "title": "Paradigm",
+      "type": "string"
+    },
+    "predictions": {
+      "items": {
+        "$ref": "#/$defs/TheoryPrediction"
+      },
+      "maxItems": 16,
+      "title": "Predictions",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "0.1.0",
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "target_theory_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Target Theory Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "experiment_id",
+    "objective",
+    "paradigm",
+    "intervention",
+    "target_theory_ids"
+  ],
+  "title": "ExperimentAST",
+  "type": "object"
+}

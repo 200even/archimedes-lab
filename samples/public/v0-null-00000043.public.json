@@ -1,0 +1,42 @@
+{
+  "broker_budget": {
+    "A_discovery": 64,
+    "B_calibration": 32,
+    "B_transfer_eval": 32,
+    "total": 128
+  },
+  "domain_size": 8,
+  "entities": [
+    "entity_00",
+    "entity_01",
+    "entity_02",
+    "entity_03",
+    "entity_04",
+    "entity_05",
+    "entity_06",
+    "entity_07",
+    "entity_08",
+    "entity_09",
+    "entity_10",
+    "entity_11",
+    "entity_12",
+    "entity_13",
+    "entity_14",
+    "entity_15"
+  ],
+  "legal_action_values": [0,1,2,3,4,5,6,7],
+  "measurement": {
+    "known_corruption_rate": 0.02,
+    "output_domain": [0,1,2,3,4,5,6,7],
+    "output_name": "y"
+  },
+  "paradigms": ["A","B"],
+  "schema_version": "0.1.0",
+  "semantics": {
+    "action_values": "opaque legal intervention values",
+    "entity_ids": "opaque persistent identifiers",
+    "output": "opaque categorical measurement"
+  },
+  "world_id": "v0-null-00000043",
+  "world_kind": "null"
+}

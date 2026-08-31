@@ -1,0 +1,14 @@
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Epistemically sealed Archimedes artifacts
+**/*.hidden.json
+**/*.validation.json
+samples/hidden/
+samples/reports/
+worlds/
