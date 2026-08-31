@@ -5,38 +5,67 @@
     "paired_sign_flip_draws": 100000,
     "rng_seed": 20260830
   },
+  "compute_parity": {
+    "aggregate_metric": "provider_total_tokens",
+    "full_max_output_tokens_per_completed_world": 69632,
+    "flat_max_output_tokens_per_completed_world": 69632,
+    "maximum_calls_per_completed_world": {
+      "flat": 22,
+      "full": 22
+    },
+    "proposed_realized_compute_ratio_band": [0.95, 1.05],
+    "status": "PENDING_REFEREE_RULING"
+  },
   "execution_authorized": false,
   "max_output_tokens": {
-    "conjecturer": 4096,
-    "critic": 2048,
-    "flat": 8192
+    "commit": 4096,
+    "conjecturer_generate": 4096,
+    "critic_select": 2048,
+    "flat_generate": 4096,
+    "flat_select": 2048
   },
   "model": {
-    "api_version": null,
-    "model_id": null,
-    "provider": null,
+    "api_revision": null,
+    "api_surface": "Gemini Interactions API",
+    "built_in_tools": "disabled",
+    "model_id": "gemini-3.7-flash",
+    "persistent_interactions": false,
+    "provider": "Google Gemini Developer API",
     "seed_behavior": null,
-    "temperature": 0,
+    "thinking_level": "high",
     "timeout_seconds": null,
-    "top_p": 1,
     "transport_retry_policy": null
   },
   "schedule": {
     "flat": {
-      "a_round_batches": [10,10,10,10,10,10],
-      "b_round_batches": [7,7,7,7],
-      "flat_max_calls": 12
+      "a_round_batches": [10, 10, 10, 10, 10, 10],
+      "b_round_batches": [7, 7, 7, 7],
+      "commit_calls": 2,
+      "generate_calls": 10,
+      "select_calls": 10,
+      "total_max_calls": 22
     },
     "full": {
-      "a_round_batches": [10,10,10,10,10,10],
-      "b_round_batches": [7,7,7,7],
-      "conjecturer_max_calls": 11,
-      "critic_max_calls": 10
+      "a_round_batches": [10, 10, 10, 10, 10, 10],
+      "b_round_batches": [7, 7, 7, 7],
+      "conjecturer_max_calls": 12,
+      "critic_max_calls": 10,
+      "total_max_calls": 22
     }
   },
-  "status": "DRAFT_NOT_AUTHORIZED_FOR_EXPOSURE",
+  "status": "SELECTION_PLAN_HOLD_REVISED_NOT_AUTHORIZED_FOR_EXPOSURE",
   "synthesis": {
     "implementation": null,
+    "qualification": {
+      "ast_count": 1000,
+      "distribution": "uniform_over_canonical_syntactic_asts",
+      "grammar_max_depth": 5,
+      "hidden_world_generator_import_forbidden": true,
+      "minimum_recovery_rate": 0.95,
+      "rng_seed": null,
+      "search_ceiling": null
+    },
+    "search_latent_assignments": false,
     "shared_identically_across_arms": true,
     "version": null
   },
