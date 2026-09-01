@@ -60,7 +60,7 @@ def test_smt_search_handles_nested_permutation_without_target_specific_rules():
         ),
         mapping=[3, 1, 7, 0, 5, 2, 6, 4],
     )
-    result = SMTProgramSearch(max_depth=4, rlimit=20_000_000).search(
+    result = SMTProgramSearch(max_depth=4, rlimit=Z3_RLIMIT_PER_INVOCATION).search(
         q_cardinality=8,
         latent_name="q",
         action_name="a",
