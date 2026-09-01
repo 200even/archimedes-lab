@@ -9,14 +9,16 @@ fixtures:
 - one cumulative 50M Z3 rlimit per search invocation;
 - invocation-local Z3 Context isolation;
 - removal of semantically dead non-permutation mapping constraints;
-- canonical completion of permutation entries not identified by W; and
+- canonical completion of permutation entries not identified by W;
 - exact scalar encoding of the frozen (Hamming error, active-node count)
-  lexicographic objective to prune needlessly complex SAT models early.
+  lexicographic objective; and
+- exact partial-bijection constraints for PERMUTE on the child values realized by
+  the current CEGIS working set, with deterministic full-bijection completion.
 
 No qualification corpus or Archimedes benchmark world was consulted in making
 these corrections.
 """
 
-from .synthesis_v02_cegis_lexscore import SMTProgramSearchV02CEGIS
+from .synthesis_v02_cegis_partialperm import SMTProgramSearchV02CEGIS
 
 SMTProgramSearch = SMTProgramSearchV02CEGIS
