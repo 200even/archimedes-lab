@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 
-from . import synthesis_v02_runtime
+from . import synthesis, synthesis_v02_cegis, synthesis_v02_runtime
 from .qualification import (
     QUALIFICATION_CORPUS_SIZE,
     QUALIFICATION_EXPECTED_DIGEST,
@@ -20,12 +20,25 @@ from .synthesis import (
     Z3_RLIMIT_PER_INVOCATION,
     solver_parameter_manifest_sha256,
 )
-from .synthesis_v02_runtime import SMTProgramSearchV02
+from .synthesis_v02_cegis import SMTProgramSearchV02CEGIS
 from .theory_eval import evaluate_expr
 
 
 def _runtime_source_sha256() -> str:
-    return hashlib.sha256(Path(synthesis_v02_runtime.__file__).read_bytes()).hexdigest()
+    """Freeze the complete trusted V0.2 synthesis implementation, not one wrapper file."""
+
+    modules = (
+        ("synthesis.py", Path(synthesis.__file__)),
+        ("synthesis_v02_cegis.py", Path(synthesis_v02_cegis.__file__)),
+        ("synthesis_v02_runtime.py", Path(synthesis_v02_runtime.__file__)),
+    )
+    digest = hashlib.sha256()
+    for name, path in modules:
+        digest.update(name.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def _target_observations(expression) -> tuple[ProgramObservation, ...]:
@@ -59,7 +72,7 @@ def qualify_range(*, start: int, stop: int) -> dict:
     for index in range(start, stop):
         observations = _target_observations(corpus[index])
         try:
-            result = SMTProgramSearchV02(
+            result = SMTProgramSearchV02CEGIS(
                 max_depth=QUALIFICATION_MAX_DEPTH,
                 rlimit=Z3_RLIMIT_PER_INVOCATION,
             ).search(
@@ -85,6 +98,7 @@ def qualify_range(*, start: int, stop: int) -> dict:
     count = stop - start
     return {
         "synthesizer_version": SYNTHESIZER_VERSION,
+        "synthesis_algorithm": "deterministic_cegis_v02",
         "qualification_corpus_digest": digest,
         "start": start,
         "stop": stop,
