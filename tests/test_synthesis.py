@@ -16,7 +16,7 @@ from archimedes_v0.synthesis import (
     Z3_RLIMIT_PER_INVOCATION,
     assert_frozen_z3_package,
 )
-from archimedes_v0.synthesis_v02_cegis import SMTProgramSearchV02CEGIS as SMTProgramSearch
+from archimedes_v0.synthesis_v02_cegis_final import SMTProgramSearchV02CEGIS as SMTProgramSearch
 from archimedes_v0.synthesis_v02_runtime import EnumerativeSynthesizerV02 as EnumerativeSynthesizer
 from archimedes_v0.theory_eval import evaluate_expr
 
