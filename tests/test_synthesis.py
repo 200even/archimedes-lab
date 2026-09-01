@@ -1,27 +1,88 @@
 from archimedes_v0.agent_interfaces import StatelessFlatAgent
-from archimedes_v0.ast_schema import AddModExpr, LatentVariable, ProgramSpec, TheoryAST, VarExpr
+from archimedes_v0.ast_schema import (
+    AddModExpr,
+    LatentVariable,
+    PermutationExpr,
+    ProgramSpec,
+    RotlExpr,
+    TheoryAST,
+    VarExpr,
+    XorExpr,
+)
 from archimedes_v0.synthesis import (
-    EnumerativeProgramSearch,
     EnumerativeSynthesizer,
     ProgramObservation,
+    SMTProgramSearch,
+    Z3_PACKAGE_VERSION,
+    Z3_RLIMIT_PER_INVOCATION,
+    assert_frozen_z3_package,
 )
+from archimedes_v0.theory_eval import evaluate_expr
 
 
-def test_enumerative_search_recovers_simple_two_variable_law():
-    observations = tuple(
-        ProgramObservation(q=q, action=a, y=(q + a) % 8)
+def _observations(expression):
+    return tuple(
+        ProgramObservation(q=q, action=a, y=evaluate_expr(expression, {"q": q, "a": a}))
         for q in range(8)
         for a in range(8)
     )
-    result = EnumerativeProgramSearch(search_ceiling=6000, max_depth=3).search(
+
+
+def test_frozen_z3_package_is_exact():
+    assert Z3_PACKAGE_VERSION == "5.1.0.0"
+    assert Z3_RLIMIT_PER_INVOCATION == 50_000_000
+    assert_frozen_z3_package()
+
+
+def test_smt_search_recovers_simple_two_variable_law():
+    target = AddModExpr(left=VarExpr(name="q"), right=VarExpr(name="a"))
+    result = SMTProgramSearch(max_depth=2, rlimit=5_000_000).search(
         q_cardinality=8,
         latent_name="q",
         action_name="a",
-        observations=observations,
-        limit=32,
+        observations=_observations(target),
+        limit=1,
     )
-    assert result.semantic_expressions_inspected <= 6000
-    assert any(candidate.exact_accuracy == 1.0 for candidate in result.candidates)
+    assert result.candidates
+    assert result.candidates[0].exact_accuracy == 1.0
+    assert result.candidates[0].truth_table == tuple(
+        evaluate_expr(target, {"q": q, "a": a}) for q in range(8) for a in range(8)
+    )
+
+
+def test_smt_search_handles_nested_permutation_without_target_specific_rules():
+    target = PermutationExpr(
+        value=XorExpr(
+            left=RotlExpr(value=VarExpr(name="q"), shift=1),
+            right=VarExpr(name="a"),
+        ),
+        mapping=[3, 1, 7, 0, 5, 2, 6, 4],
+    )
+    result = SMTProgramSearch(max_depth=4, rlimit=20_000_000).search(
+        q_cardinality=8,
+        latent_name="q",
+        action_name="a",
+        observations=_observations(target),
+        limit=1,
+    )
+    assert result.candidates
+    assert result.candidates[0].exact_accuracy == 1.0
+
+
+def test_deterministic_replay_on_independent_fixture():
+    target = XorExpr(left=VarExpr(name="q"), right=VarExpr(name="a"))
+    kwargs = dict(
+        q_cardinality=8,
+        latent_name="q",
+        action_name="a",
+        observations=_observations(target),
+        limit=1,
+    )
+    first = SMTProgramSearch(max_depth=2, rlimit=5_000_000).search(**kwargs)
+    second = SMTProgramSearch(max_depth=2, rlimit=5_000_000).search(**kwargs)
+    assert first.candidates and second.candidates
+    assert first.candidates[0].canonical_ast == second.candidates[0].canonical_ast
+    assert first.candidates[0].truth_table == second.candidates[0].truth_table
 
 
 def test_synthesizer_never_changes_llm_partition():
@@ -47,12 +108,12 @@ def test_synthesizer_never_changes_llm_partition():
         for entity_id, q in assignments.items()
         for action in range(8)
     )
-    results = EnumerativeSynthesizer(semantic_search_ceiling=6000, max_depth=3).synthesize(
+    results = EnumerativeSynthesizer(max_depth=2).synthesize(
         paradigm="A",
         observations=observations,
         candidate_theories=(source,),
         frozen_a_theory=None,
-        limit=4,
+        limit=1,
     )
     assert results
     assert all(theory.latent_variables[0].assignments == assignments for theory in results)
