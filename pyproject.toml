@@ -7,7 +7,7 @@ name = "archimedes-v0"
 version = "0.1.3"
 description = "Preregistered hidden-world lab, epistemic broker, and pre-exposure agent interfaces"
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2.8", "z3-solver>=4.13"]
+dependencies = ["pydantic>=2.8", "z3-solver==5.1.0.0"]
 
 [tool.setuptools]
 packages = ["archimedes_v0"]
