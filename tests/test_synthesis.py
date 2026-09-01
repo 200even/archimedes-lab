@@ -15,7 +15,7 @@ from archimedes_v0.synthesis import (
     Z3_RLIMIT_PER_INVOCATION,
     assert_frozen_z3_package,
 )
-from archimedes_v0.synthesis_v02_fast import SMTProgramSearchV02Fast as SMTProgramSearch
+from archimedes_v0.synthesis_v02_finite import SMTProgramSearchV02Finite as SMTProgramSearch
 from archimedes_v0.synthesis_v02_runtime import EnumerativeSynthesizerV02 as EnumerativeSynthesizer
 from archimedes_v0.theory_eval import evaluate_expr
 
