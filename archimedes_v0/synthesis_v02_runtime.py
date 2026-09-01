@@ -20,16 +20,17 @@ from .synthesis import (
     assert_frozen_z3_package,
     solver_parameter_manifest_sha256,
 )
+from .synthesis_v02_cegis import SMTProgramSearchV02CEGIS
 from .theory_eval import operator_signature, program_for, variables_used
 
 
 def _exact_observation_constraints(problem: _SkeletonProblem) -> tuple:
     """Logical strengthening of Hamming error == 0.
 
-    A sum of 64 mismatch indicators equal to zero is logically equivalent to all
-    64 root-output equalities, but the direct equalities propagate much more strongly
-    through the fixed syntax skeleton. This transformation is grammar-general and
-    uses only the supplied observations.
+    A sum of mismatch indicators equal to zero is logically equivalent to all
+    root-output equalities, but the direct equalities propagate more strongly
+    through the original monolithic syntax skeleton. This implementation remains
+    in-tree as the pre-CEGIS reference encoding only.
     """
 
     return tuple(
@@ -40,13 +41,7 @@ def _exact_observation_constraints(problem: _SkeletonProblem) -> tuple:
 
 
 def _solve_one_exact_first(problem: _SkeletonProblem, *, blocks: tuple, rlimit: int):
-    """Optimize one semantic candidate, trying the theoretical Hamming lower bound first.
-
-    The exact lower-bound check uses direct root equalities, which are logically
-    equivalent to `error == 0` but give the SMT engine stronger propagation. If exact
-    recovery is UNSAT, ordinary bounded Hamming minimization is used for noisy data.
-    A resource hit after any SAT model returns the best valid model already found.
-    """
+    """Pre-CEGIS reference optimizer retained for reproducibility."""
 
     checker = _BudgetChecker(tuple(problem.constraints) + blocks, rlimit)
     fixed: list = []
@@ -104,7 +99,12 @@ def _solve_one_exact_first(problem: _SkeletonProblem, *, blocks: tuple, rlimit: 
 
 
 class SMTProgramSearchV02:
-    """Authorized V0.2 bounded syntax-guided constraint synthesizer."""
+    """Pre-CEGIS monolithic V0.2 reference implementation.
+
+    The public V0.2 runtime alias below points to `SMTProgramSearchV02CEGIS`.
+    This class remains available only so the preregistered implementation history
+    can be reproduced; it is not used by qualification or agent orchestration.
+    """
 
     def __init__(
         self,
@@ -269,7 +269,7 @@ class EnumerativeSynthesizerV02:
             if not valid or not program_observations:
                 continue
 
-            search = SMTProgramSearchV02(
+            search = SMTProgramSearchV02CEGIS(
                 max_depth=self.max_depth,
                 rlimit=self.solver_rlimit,
             ).search(
@@ -327,5 +327,5 @@ class EnumerativeSynthesizerV02:
         return tuple(theory for _, theory in ranked_outputs[:limit])
 
 
-SMTProgramSearch = SMTProgramSearchV02
+SMTProgramSearch = SMTProgramSearchV02CEGIS
 EnumerativeSynthesizer = EnumerativeSynthesizerV02
