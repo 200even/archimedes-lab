@@ -1,0 +1,99 @@
+name: Synthesizer V0.2 Qualification
+
+on:
+  push:
+    paths:
+      - V02_QUALIFICATION_TRIGGER.txt
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.14'
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e .
+      - name: Run frozen V0.2 qualification shard
+        shell: bash
+        run: |
+          start=$(( ${{ matrix.shard }} * 50 ))
+          stop=$(( start + 50 ))
+          python -m archimedes_v0.qualify_synthesizer \
+            --start "$start" \
+            --stop "$stop" \
+            --out "qualification-v02-${{ matrix.shard }}.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qualification-v02-${{ matrix.shard }}
+          path: qualification-v02-${{ matrix.shard }}.json
+
+  aggregate:
+    if: always()
+    needs: qualify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: qualification-v02-*
+          path: reports
+          merge-multiple: true
+      - name: Aggregate one-shot V0.2 qualification
+        shell: bash
+        run: |
+          python - <<'PY'
+          import glob, json
+
+          rows = []
+          for path in sorted(glob.glob('reports/qualification-v02-*.json')):
+              with open(path, encoding='utf-8') as fh:
+                  rows.append(json.load(fh))
+
+          count = sum(row['count'] for row in rows)
+          recovered = sum(row['recovered'] for row in rows)
+          rate = recovered / count if count else None
+          complete = count == 1000 and len(rows) == 20
+          qualified = bool(complete and rate is not None and rate >= 0.95)
+
+          summary = {
+              'status': 'QUALIFIED' if qualified else 'TOOL_ASSISTED_V0_ABANDONED',
+              'one_shot_rule': True,
+              'complete': complete,
+              'shards_present': len(rows),
+              'count': count,
+              'recovered': recovered,
+              'recovery_rate': rate,
+              'threshold': 0.95,
+              'qualification_corpus_digest': rows[0]['qualification_corpus_digest'] if rows else None,
+              'synthesizer_version': rows[0]['synthesizer_version'] if rows else None,
+              'solver_package_version': rows[0]['solver_package_version'] if rows else None,
+              'solver_internal_version': rows[0]['solver_internal_version'] if rows else None,
+              'solver_parameter_manifest_sha256': rows[0]['solver_parameter_manifest_sha256'] if rows else None,
+              'synthesizer_source_sha256': rows[0]['synthesizer_source_sha256'] if rows else None,
+              'rlimit_per_invocation': rows[0]['rlimit_per_invocation'] if rows else None,
+              'resource_exhausted_count': sum(row['resource_exhausted_count'] for row in rows),
+              'unknown_count': sum(row['unknown_count'] for row in rows),
+              'exception_count': sum(row['exception_count'] for row in rows),
+              'sat_checks_total': sum(row['sat_checks_total'] for row in rows),
+              'rlimit_used_total': sum(row['rlimit_used_total'] for row in rows),
+              'individual_failure_details_emitted': False,
+          }
+          with open('qualification_v02_summary.json', 'w', encoding='utf-8') as fh:
+              json.dump(summary, fh, sort_keys=True, indent=2)
+              fh.write('\n')
+          print(json.dumps(summary, sort_keys=True, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qualification-v02-summary
+          path: qualification_v02_summary.json
