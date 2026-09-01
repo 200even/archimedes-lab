@@ -10,12 +10,14 @@ from archimedes_v0.ast_schema import (
     XorExpr,
 )
 from archimedes_v0.synthesis import (
-    EnumerativeSynthesizer,
     ProgramObservation,
-    SMTProgramSearch,
     Z3_PACKAGE_VERSION,
     Z3_RLIMIT_PER_INVOCATION,
     assert_frozen_z3_package,
+)
+from archimedes_v0.synthesis_v02_runtime import (
+    EnumerativeSynthesizerV02 as EnumerativeSynthesizer,
+    SMTProgramSearchV02 as SMTProgramSearch,
 )
 from archimedes_v0.theory_eval import evaluate_expr
 
@@ -43,8 +45,8 @@ def test_smt_search_recovers_simple_two_variable_law():
         observations=_observations(target),
         limit=1,
     )
-    assert result.candidates
-    assert result.candidates[0].exact_accuracy == 1.0
+    assert result.candidates, result
+    assert result.candidates[0].exact_accuracy == 1.0, result
     assert result.candidates[0].truth_table == tuple(
         evaluate_expr(target, {"q": q, "a": a}) for q in range(8) for a in range(8)
     )
@@ -65,8 +67,8 @@ def test_smt_search_handles_nested_permutation_without_target_specific_rules():
         observations=_observations(target),
         limit=1,
     )
-    assert result.candidates
-    assert result.candidates[0].exact_accuracy == 1.0
+    assert result.candidates, result
+    assert result.candidates[0].exact_accuracy == 1.0, result
 
 
 def test_deterministic_replay_on_independent_fixture():
