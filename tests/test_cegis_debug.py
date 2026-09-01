@@ -16,7 +16,7 @@ def _action_observations():
     )
 
 
-def _problem(observations):
+def _full_problem(observations):
     return _SkeletonProblem(
         q_cardinality=8,
         latent_name="q",
@@ -26,17 +26,9 @@ def _problem(observations):
     )
 
 
-def _direct_status(observations):
-    problem = _problem(observations)
-    solver = z3.Solver()
-    solver.add(*problem.constraints)
-    solver.add(problem.error <= 0)
-    return solver.check()
-
-
 def test_rlimit_statistic_has_a_measurable_precheck_baseline():
     ordered = impl._canonical_observations(_action_observations())
-    problem = _problem((ordered[0], ordered[1]))
+    problem = _full_problem((ordered[0], ordered[1]))
     solver = z3.Solver()
     solver.set(rlimit=2_000_000)
     solver.add(*problem.constraints)
@@ -46,16 +38,14 @@ def test_rlimit_statistic_has_a_measurable_precheck_baseline():
     after = _rlimit_count(solver.statistics())
     assert status == z3.sat
     assert after > before, (before, after)
-    assert after - before < 2_000_000, (before, after, after - before)
+    assert 0 < after - before < 2_000_000, (before, after, after - before)
 
 
-def test_cegis_binding_and_first_two_action_constraints_are_satisfiable():
-    assert impl._WorkingSetProblem is _SkeletonProblem
+def test_reduced_working_set_cegis_finds_action_law():
+    assert impl._WorkingSetProblem is not _SkeletonProblem
     ordered = impl._canonical_observations(_action_observations())
     assert ordered[0] == ProgramObservation(q=0, action=0, y=0)
     assert ordered[1] == ProgramObservation(q=0, action=1, y=1)
-    assert _direct_status((ordered[0],)) == z3.sat
-    assert _direct_status((ordered[0], ordered[1])) == z3.sat
 
     budget = impl._CumulativeBudget.create(2_000_000)
     working = [0]
@@ -72,6 +62,8 @@ def test_cegis_binding_and_first_two_action_constraints_are_satisfiable():
     )
     assert result.status == "feasible", (result, budget, working)
     assert result.candidate is not None and result.candidate.exact_accuracy == 1.0
+    assert len(working) >= 2
+    assert budget.used <= budget.limit
 
     search = SMTProgramSearchV02CEGIS(max_depth=1, rlimit=2_000_000).search(
         q_cardinality=8,
@@ -81,3 +73,4 @@ def test_cegis_binding_and_first_two_action_constraints_are_satisfiable():
         limit=1,
     )
     assert search.candidates, search
+    assert search.rlimit_used <= search.rlimit
