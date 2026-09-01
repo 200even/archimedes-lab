@@ -8,8 +8,6 @@ import z3
 from .ast_schema import ProgramSpec, TheoryAST
 from .constants import MAX_EXPRESSION_DEPTH
 from .synthesis import (
-    CandidateSynthesizer,
-    NoSynthesis,
     OP_Q,
     ProgramObservation,
     ProgramSearchResult,
@@ -25,28 +23,41 @@ from .synthesis import (
 from .theory_eval import operator_signature, program_for, variables_used
 
 
+def _exact_observation_constraints(problem: _SkeletonProblem) -> tuple:
+    """Logical strengthening of Hamming error == 0.
+
+    A sum of 64 mismatch indicators equal to zero is logically equivalent to all
+    64 root-output equalities, but the direct equalities propagate much more strongly
+    through the fixed syntax skeleton. This transformation is grammar-general and
+    uses only the supplied observations.
+    """
+
+    return tuple(
+        problem.values[0][problem.point_index[(observation.q, observation.action)]]
+        == z3.BitVecVal(observation.y, 3)
+        for observation in problem.observations
+    )
+
+
 def _solve_one_exact_first(problem: _SkeletonProblem, *, blocks: tuple, rlimit: int):
     """Optimize one semantic candidate, trying the theoretical Hamming lower bound first.
 
-    This is the same successive-SAT objective preregistered for V0.2. Testing the
-    lower bound `error == 0` first is complete and grammar-general: if SAT, Hamming
-    optimality is proved in one check; if UNSAT, ordinary bounded minimization follows.
+    The exact lower-bound check uses direct root equalities, which are logically
+    equivalent to `error == 0` but give the SMT engine stronger propagation. If exact
+    recovery is UNSAT, ordinary bounded Hamming minimization is used for noisy data.
     A resource hit after any SAT model returns the best valid model already found.
     """
 
     checker = _BudgetChecker(tuple(problem.constraints) + blocks, rlimit)
     fixed: list = []
+    exact_constraints = _exact_observation_constraints(problem)
 
-    # The absolute lower bound is zero. This avoids spending deterministic resource
-    # on a sequence of weaker SAT bounds when an exact grammar program exists.
-    status, model = checker.check((), (problem.error == 0,))
+    status, model = checker.check((), exact_constraints)
     if status == z3.sat and model is not None:
         problem.assert_model_soundness(model)
         best_model = model
-        fixed.append(problem.error == 0)
+        fixed.extend(exact_constraints)
     elif status == z3.unsat:
-        # No exact program exists (expected under noisy visible observations). Find a
-        # feasible program, then minimize Hamming error with ordinary SAT checks.
         status, model = checker.check(())
         if status != z3.sat or model is None:
             return None, checker, None
@@ -63,10 +74,8 @@ def _solve_one_exact_first(problem: _SkeletonProblem, *, blocks: tuple, rlimit: 
         if not complete:
             return best_model, checker, problem.candidate_from_model(best_model)
     else:
-        # A resource hit before any valid model is known is a graceful failure.
         return None, checker, None
 
-    # Secondary objectives cannot invalidate the best Hamming model already found.
     best_model, complete = _minimize_int(
         checker,
         fixed,
@@ -318,6 +327,5 @@ class EnumerativeSynthesizerV02:
         return tuple(theory for _, theory in ranked_outputs[:limit])
 
 
-# Public continuity aliases for the authorized V0.2 implementation.
 SMTProgramSearch = SMTProgramSearchV02
 EnumerativeSynthesizer = EnumerativeSynthesizerV02
