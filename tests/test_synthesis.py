@@ -1,6 +1,7 @@
 from archimedes_v0.agent_interfaces import StatelessFlatAgent
 from archimedes_v0.ast_schema import (
     AddModExpr,
+    ConstExpr,
     LatentVariable,
     PermutationExpr,
     ProgramSpec,
@@ -15,7 +16,7 @@ from archimedes_v0.synthesis import (
     Z3_RLIMIT_PER_INVOCATION,
     assert_frozen_z3_package,
 )
-from archimedes_v0.synthesis_v02_finite import SMTProgramSearchV02Finite as SMTProgramSearch
+from archimedes_v0.synthesis_v02_cegis import SMTProgramSearchV02CEGIS as SMTProgramSearch
 from archimedes_v0.synthesis_v02_runtime import EnumerativeSynthesizerV02 as EnumerativeSynthesizer
 from archimedes_v0.theory_eval import evaluate_expr
 
@@ -34,7 +35,22 @@ def test_frozen_z3_package_is_exact():
     assert_frozen_z3_package()
 
 
-def test_smt_search_recovers_simple_two_variable_law():
+def test_cegis_exhaustively_recovers_depth_one_grammar():
+    targets = [VarExpr(name="q"), VarExpr(name="a")]
+    targets.extend(ConstExpr(value=value) for value in range(8))
+    for target in targets:
+        result = SMTProgramSearch(max_depth=1, rlimit=2_000_000).search(
+            q_cardinality=8,
+            latent_name="q",
+            action_name="a",
+            observations=_observations(target),
+            limit=1,
+        )
+        assert result.candidates, (target, result)
+        assert result.candidates[0].exact_accuracy == 1.0, (target, result)
+
+
+def test_cegis_recovers_simple_two_variable_law():
     target = AddModExpr(left=VarExpr(name="q"), right=VarExpr(name="a"))
     result = SMTProgramSearch(max_depth=2, rlimit=5_000_000).search(
         q_cardinality=8,
@@ -50,15 +66,32 @@ def test_smt_search_recovers_simple_two_variable_law():
     )
 
 
-def test_smt_search_handles_nested_permutation_without_target_specific_rules():
-    target = PermutationExpr(
+def _nested_permutation_target():
+    return PermutationExpr(
         value=XorExpr(
             left=RotlExpr(value=VarExpr(name="q"), shift=1),
             right=VarExpr(name="a"),
         ),
         mapping=[3, 1, 7, 0, 5, 2, 6, 4],
     )
+
+
+def test_cegis_handles_nested_permutation_without_target_specific_rules():
+    target = _nested_permutation_target()
     result = SMTProgramSearch(max_depth=4, rlimit=Z3_RLIMIT_PER_INVOCATION).search(
+        q_cardinality=8,
+        latent_name="q",
+        action_name="a",
+        observations=_observations(target),
+        limit=1,
+    )
+    assert result.candidates, result
+    assert result.candidates[0].exact_accuracy == 1.0, result
+
+
+def test_cegis_handles_same_fixture_inside_qualification_depth_skeleton():
+    target = _nested_permutation_target()
+    result = SMTProgramSearch(max_depth=5, rlimit=Z3_RLIMIT_PER_INVOCATION).search(
         q_cardinality=8,
         latent_name="q",
         action_name="a",
@@ -83,6 +116,8 @@ def test_deterministic_replay_on_independent_fixture():
     assert first.candidates and second.candidates
     assert first.candidates[0].canonical_ast == second.candidates[0].canonical_ast
     assert first.candidates[0].truth_table == second.candidates[0].truth_table
+    assert first.rlimit_used == second.rlimit_used
+    assert first.sat_checks == second.sat_checks
 
 
 def test_synthesizer_never_changes_llm_partition():
