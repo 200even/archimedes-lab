@@ -1,17 +1,20 @@
 """Final authorized V0.2 CEGIS binding.
 
-Independent synthetic-fixture testing exposed two implementation defects before
-qualification exposure:
+Independent synthetic-fixture testing exposed one resource-accounting defect in
+the first CEGIS draft before qualification exposure: Z3 5.1.0.0 reports
+`rlimit count` cumulatively, so charging the raw statistic to each fresh solver
+exhausted the external 50M ledger after one SAT check.
 
-1. the first CEGIS draft duplicated `_SkeletonProblem` semantics unnecessarily;
-2. Z3 5.1.0.0 reports `rlimit count` cumulatively, so charging the raw statistic
-   to each fresh solver exhausted the external 50M ledger after one SAT check.
+The authorized CEGIS architecture requires a reduced working-set semantic graph:
+Z3 reasons only over the canonical monotonic working set W, while the trusted
+Python evaluator checks every returned AST against the complete observation set O.
+That reduction is the mechanism that removes the monolithic full-matrix constraint
+bottleneck without changing the bounded AST hypothesis class.
 
-This binding fixes both without changing the preregistered hypothesis class or
-CEGIS policy. It uses the frozen base semantic skeleton and charges only the
+This binding therefore keeps the CEGIS working-set problem and charges only the
 measured per-check delta in Z3's deterministic rlimit statistic. Every fresh
-solver is still capped at the *remaining* invocation budget, so total mechanical
-compute cannot exceed the single frozen budget.
+solver is still capped at the remaining invocation budget, so total mechanical
+compute cannot exceed the single frozen resource envelope.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ from dataclasses import dataclass
 import z3
 
 from . import synthesis_v02_cegis as _cegis
-from .synthesis import Z3_RANDOM_SEED, _SkeletonProblem, _rlimit_count
+from .synthesis import Z3_RANDOM_SEED, _rlimit_count
 
 
 @dataclass
@@ -54,9 +57,8 @@ class _DeltaCumulativeBudget:
         if extra_constraints:
             solver.add(*extra_constraints)
 
-        # In the frozen Z3 package the `rlimit count` statistic includes prior
-        # work in the process/context. Its delta around solver.check() is the
-        # deterministic resource consumed by this invocation.
+        # In the frozen Z3 package the statistic contains a pre-check baseline.
+        # Only the delta around this check is chargeable to this invocation.
         before = _rlimit_count(solver.statistics())
         self.checks += 1
         status = solver.check()
@@ -73,17 +75,14 @@ class _DeltaCumulativeBudget:
             self.exhausted = True
             return status, None
         if status == z3.sat:
-            # A SAT model may be the full-observation-valid candidate even when
-            # it consumes the final resource unit. The trusted evaluator gets to
-            # verify it before a subsequent check declares exhaustion.
+            # The trusted full-O evaluator may accept a model that consumes the
+            # final resource unit; only a subsequent required check is forbidden.
             return status, solver.model()
         return status, None
 
 
-# `_cegis_feasible` resolves these globals at call time. Both bindings preserve
-# the authorized CEGIS control loop while removing prequalification implementation
-# defects found solely on independent synthetic fixtures.
-_cegis._WorkingSetProblem = _SkeletonProblem
+# `_cegis_feasible` resolves the budget class at call time. The working-set
+# problem remains the native reduced-point implementation in `synthesis_v02_cegis`.
 _cegis._CumulativeBudget = _DeltaCumulativeBudget
 
 SMTProgramSearchV02CEGIS = _cegis.SMTProgramSearchV02CEGIS
