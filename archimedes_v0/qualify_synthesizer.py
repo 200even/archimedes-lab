@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import time
 from pathlib import Path
 
+from . import synthesis_v02_runtime
 from .qualification import (
     QUALIFICATION_CORPUS_SIZE,
     QUALIFICATION_EXPECTED_DIGEST,
@@ -13,14 +15,17 @@ from .qualification import (
     qualification_corpus_digest,
 )
 from .synthesis import (
-    SMTProgramSearch,
     ProgramObservation,
     SYNTHESIZER_VERSION,
     Z3_RLIMIT_PER_INVOCATION,
     solver_parameter_manifest_sha256,
-    source_sha256,
 )
+from .synthesis_v02_runtime import SMTProgramSearchV02
 from .theory_eval import evaluate_expr
+
+
+def _runtime_source_sha256() -> str:
+    return hashlib.sha256(Path(synthesis_v02_runtime.__file__).read_bytes()).hexdigest()
 
 
 def _target_observations(expression) -> tuple[ProgramObservation, ...]:
@@ -50,12 +55,11 @@ def qualify_range(*, start: int, stop: int) -> dict:
     package_version = None
     internal_version = None
 
-    # Deliberately emit aggregate-only results. Individual failed corpus items are
-    # not exposed for debugging under the referee's one-shot/no-meta-overfitting rule.
+    # Aggregate-only output prevents individual failed items from becoming a tuning signal.
     for index in range(start, stop):
         observations = _target_observations(corpus[index])
         try:
-            result = SMTProgramSearch(
+            result = SMTProgramSearchV02(
                 max_depth=QUALIFICATION_MAX_DEPTH,
                 rlimit=Z3_RLIMIT_PER_INVOCATION,
             ).search(
@@ -74,8 +78,7 @@ def qualify_range(*, start: int, stop: int) -> dict:
             package_version = result.solver_package_version
             internal_version = result.solver_internal_version
         except Exception:
-            # Qualification exceptions count as item failures and are intentionally
-            # not accompanied by item identity or exception text in the artifact.
+            # Exceptions are qualification failures; item identity and exception text stay hidden.
             exceptions += 1
 
     elapsed = time.monotonic() - began
@@ -97,7 +100,7 @@ def qualify_range(*, start: int, stop: int) -> dict:
         "solver_package_version": package_version,
         "solver_internal_version": internal_version,
         "solver_parameter_manifest_sha256": solver_parameter_manifest_sha256(),
-        "synthesizer_source_sha256": source_sha256(),
+        "synthesizer_source_sha256": _runtime_source_sha256(),
         "elapsed_seconds": elapsed,
         "uses_hidden_world_generator": False,
         "qualification_target": "complete 8x8 observational equivalence",
