@@ -1,7 +1,12 @@
-"""Final preregistered feasible-incumbent-first schedule for V0.2 CEGIS.
+"""Final preregistered feasible-first / exact-first schedule for V0.2 CEGIS.
 
-The exact sequence is frozen in SYNTH_V02_FEASIBLE_FIRST_SCHEDULE_FREEZE.md.
-This module changes only optimization order.  It preserves the frozen grammar,
+The exact deterministic sequence is frozen in
+SYNTH_V02_FEASIBLE_FIRST_SCHEDULE_FREEZE.md:
+
+    fallback -> E <= 0 -> remaining Hamming binary search
+    -> node tightening -> depth tightening -> canonical tie-break
+
+This module changes only optimization order. It preserves the frozen grammar,
 CEGIS counterexample policy, trusted full-O verification, objective hierarchy,
 partial-permutation semantics, invocation-local Z3 context, and one cumulative
 50M rlimit.
@@ -41,12 +46,11 @@ def _optimize_one_feasible_first(
     working_indices: list[int],
     blocks: tuple,
 ):
-    """Anytime lexicographic optimization with a verified incumbent first."""
+    """Anytime lexicographic optimization under the frozen exact-first order."""
 
-    max_nodes = (1 << max_depth) - 1
-
-    # Phase 0: establish any full-O-verified legal incumbent before attempting
-    # lower-bound proofs.  These are the maximally permissive legal bounds.
+    # Phase 0: establish any full-O-verified legal fallback incumbent before
+    # attempting an optimized Hamming bound. No structural minimization is
+    # supplied; the frozen maximum syntax skeleton is intrinsic to max_depth.
     initial = _cegis._cegis_feasible(
         q_cardinality=q_cardinality,
         latent_name=latent_name,
@@ -56,65 +60,91 @@ def _optimize_one_feasible_first(
         budget=budget,
         working_indices=working_indices,
         error_bound=len(observations),
-        node_bound=max_nodes,
-        depth_bound=max_depth,
+        node_bound=None,
+        depth_bound=None,
         blocks=blocks,
     )
     if initial.status != "feasible" or initial.candidate is None:
         return None, False
     incumbent = initial.candidate
 
-    # Phase 1: exact minimum full-O Hamming error by deterministic binary
-    # tightening.  Any resource exhaustion returns the verified incumbent.
-    lo = 0
-    hi = incumbent.total - incumbent.correct
-    while lo < hi:
-        midpoint = (lo + hi) // 2
-        result = _cegis._cegis_feasible(
-            q_cardinality=q_cardinality,
-            latent_name=latent_name,
-            action_name=action_name,
-            observations=observations,
-            max_depth=max_depth,
-            budget=budget,
-            working_indices=working_indices,
-            error_bound=midpoint,
-            node_bound=max_nodes,
-            depth_bound=max_depth,
-            blocks=blocks,
-        )
-        if result.status == "unknown":
-            return incumbent, False
-        if result.status == "infeasible":
-            lo = midpoint + 1
-            continue
-        assert result.candidate is not None
-        incumbent = _better(incumbent, result.candidate)
-        hi = min(midpoint, result.candidate.total - result.candidate.correct)
+    # Phase 1A: mandatory exact-first query at the mathematical Hamming lower
+    # bound. The referee explicitly prohibited node/depth minimization here.
+    exact = _cegis._cegis_feasible(
+        q_cardinality=q_cardinality,
+        latent_name=latent_name,
+        action_name=action_name,
+        observations=observations,
+        max_depth=max_depth,
+        budget=budget,
+        working_indices=working_indices,
+        error_bound=0,
+        node_bound=None,
+        depth_bound=None,
+        blocks=blocks,
+    )
+    if exact.status == "unknown":
+        return incumbent, False
 
-    error_bound = lo
-    if (incumbent.total - incumbent.correct) != error_bound:
-        # Completion of the binary proof requires a witness at the proven bound.
-        witness = _cegis._cegis_feasible(
-            q_cardinality=q_cardinality,
-            latent_name=latent_name,
-            action_name=action_name,
-            observations=observations,
-            max_depth=max_depth,
-            budget=budget,
-            working_indices=working_indices,
-            error_bound=error_bound,
-            node_bound=max_nodes,
-            depth_bound=max_depth,
-            blocks=blocks,
-        )
-        if witness.status != "feasible" or witness.candidate is None:
-            return incumbent, False
-        incumbent = _better(incumbent, witness.candidate)
-    if (incumbent.total - incumbent.correct) != error_bound:
-        raise AssertionError("feasible-first Hamming optimum lacks a matching incumbent")
+    if exact.status == "feasible":
+        assert exact.candidate is not None
+        incumbent = _better(incumbent, exact.candidate)
+        if (incumbent.total - incumbent.correct) != 0:
+            raise AssertionError("exact-first feasibility did not produce an exact incumbent")
+        error_bound = 0
+    else:
+        # Phase 1B: E<=0 was proven infeasible. Search only the remaining
+        # interval [1, e_inc] by deterministic binary tightening, still without
+        # structural minimization.
+        lo = 1
+        hi = incumbent.total - incumbent.correct
+        while lo < hi:
+            midpoint = (lo + hi) // 2
+            result = _cegis._cegis_feasible(
+                q_cardinality=q_cardinality,
+                latent_name=latent_name,
+                action_name=action_name,
+                observations=observations,
+                max_depth=max_depth,
+                budget=budget,
+                working_indices=working_indices,
+                error_bound=midpoint,
+                node_bound=None,
+                depth_bound=None,
+                blocks=blocks,
+            )
+            if result.status == "unknown":
+                return incumbent, False
+            if result.status == "infeasible":
+                lo = midpoint + 1
+                continue
+            assert result.candidate is not None
+            incumbent = _better(incumbent, result.candidate)
+            hi = min(midpoint, result.candidate.total - result.candidate.correct)
 
-    # Phase 2: exact minimum active-node count at the proven Hamming optimum.
+        error_bound = lo
+        if (incumbent.total - incumbent.correct) != error_bound:
+            # Exactly one witness query at the established minimum bound.
+            witness = _cegis._cegis_feasible(
+                q_cardinality=q_cardinality,
+                latent_name=latent_name,
+                action_name=action_name,
+                observations=observations,
+                max_depth=max_depth,
+                budget=budget,
+                working_indices=working_indices,
+                error_bound=error_bound,
+                node_bound=None,
+                depth_bound=None,
+                blocks=blocks,
+            )
+            if witness.status != "feasible" or witness.candidate is None:
+                return incumbent, False
+            incumbent = _better(incumbent, witness.candidate)
+        if (incumbent.total - incumbent.correct) != error_bound:
+            raise AssertionError("Hamming optimum lacks a matching verified incumbent")
+
+    # Phase 2: exact minimum active-node count only after Hamming is fixed.
     lo = 1
     hi = incumbent.node_count
     while lo < hi:
@@ -129,7 +159,7 @@ def _optimize_one_feasible_first(
             working_indices=working_indices,
             error_bound=error_bound,
             node_bound=midpoint,
-            depth_bound=max_depth,
+            depth_bound=None,
             blocks=blocks,
         )
         if result.status == "unknown":
@@ -153,14 +183,14 @@ def _optimize_one_feasible_first(
             working_indices=working_indices,
             error_bound=error_bound,
             node_bound=node_bound,
-            depth_bound=max_depth,
+            depth_bound=None,
             blocks=blocks,
         )
         if witness.status != "feasible" or witness.candidate is None:
             return incumbent, False
         incumbent = _better(incumbent, witness.candidate)
     if (incumbent.total - incumbent.correct) != error_bound or incumbent.node_count != node_bound:
-        raise AssertionError("feasible-first node optimum lacks a matching incumbent")
+        raise AssertionError("node optimum lacks a matching verified incumbent")
 
     # Phase 3: exact minimum depth at fixed Hamming and node optima.
     lo = 1
@@ -212,7 +242,7 @@ def _optimize_one_feasible_first(
         or incumbent.node_count != node_bound
         or incumbent.depth != depth_bound
     ):
-        raise AssertionError("feasible-first depth optimum lacks a matching incumbent")
+        raise AssertionError("depth optimum lacks a matching verified incumbent")
 
     # Phase 4: existing frozen canonical preorder selector/mapping tie-break.
     canonical, complete = _cegis._canonicalize(
@@ -233,8 +263,9 @@ def _optimize_one_feasible_first(
     return incumbent, complete
 
 
-# The public search class resolves this global at call time.  This is the final
-# preregistered search-order adjustment; no hypothesis or grammar binding changes.
+# The public search class resolves this global at call time. This is the final
+# referee-authorized search-order clarification; no hypothesis or grammar
+# binding changes.
 _cegis._optimize_one = _optimize_one_feasible_first
 
 SMTProgramSearchV02CEGIS = _cegis.SMTProgramSearchV02CEGIS
