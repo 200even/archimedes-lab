@@ -6,7 +6,16 @@ import json
 import time
 from pathlib import Path
 
-from . import synthesis, synthesis_v02_cegis, synthesis_v02_runtime
+from . import (
+    synthesis,
+    synthesis_v02_cegis,
+    synthesis_v02_cegis_feasiblefirst,
+    synthesis_v02_cegis_final,
+    synthesis_v02_cegis_hardened,
+    synthesis_v02_cegis_lexscore,
+    synthesis_v02_cegis_partialperm,
+    synthesis_v02_runtime,
+)
 from .qualification import (
     QUALIFICATION_CORPUS_SIZE,
     QUALIFICATION_EXPECTED_DIGEST,
@@ -20,16 +29,26 @@ from .synthesis import (
     Z3_RLIMIT_PER_INVOCATION,
     solver_parameter_manifest_sha256,
 )
-from .synthesis_v02_cegis import SMTProgramSearchV02CEGIS
+from .synthesis_v02_cegis_final import SMTProgramSearchV02CEGIS
 from .theory_eval import evaluate_expr
 
 
 def _runtime_source_sha256() -> str:
-    """Freeze the complete trusted V0.2 synthesis implementation, not one wrapper file."""
+    """Freeze the complete trusted V0.2 synthesis implementation.
+
+    The qualification must hash the final bound search implementation, including
+    every semantics-preserving prequalification hardening module that contributes
+    runtime bindings.  This is provenance only; it does not alter synthesis.
+    """
 
     modules = (
         ("synthesis.py", Path(synthesis.__file__)),
         ("synthesis_v02_cegis.py", Path(synthesis_v02_cegis.__file__)),
+        ("synthesis_v02_cegis_hardened.py", Path(synthesis_v02_cegis_hardened.__file__)),
+        ("synthesis_v02_cegis_lexscore.py", Path(synthesis_v02_cegis_lexscore.__file__)),
+        ("synthesis_v02_cegis_partialperm.py", Path(synthesis_v02_cegis_partialperm.__file__)),
+        ("synthesis_v02_cegis_feasiblefirst.py", Path(synthesis_v02_cegis_feasiblefirst.__file__)),
+        ("synthesis_v02_cegis_final.py", Path(synthesis_v02_cegis_final.__file__)),
         ("synthesis_v02_runtime.py", Path(synthesis_v02_runtime.__file__)),
     )
     digest = hashlib.sha256()
@@ -98,7 +117,7 @@ def qualify_range(*, start: int, stop: int) -> dict:
     count = stop - start
     return {
         "synthesizer_version": SYNTHESIZER_VERSION,
-        "synthesis_algorithm": "deterministic_cegis_v02",
+        "synthesis_algorithm": "deterministic_cegis_v02_exact_first",
         "qualification_corpus_digest": digest,
         "start": start,
         "stop": stop,
