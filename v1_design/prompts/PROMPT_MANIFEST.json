@@ -1,0 +1,26 @@
+{
+  "status": "FROZEN_FOR_REFEREE_REVIEW_NOT_OPERATIONAL",
+  "version": "v1-design-1",
+  "files": {
+    "conjecturer_system.txt": {
+      "sha256": "2b530b7f5328ae7080299adc00f90b4380cede58f2971400ba9eb5033b04fa4e",
+      "max_output_tokens_research": 4096,
+      "max_output_tokens_commit": 4096
+    },
+    "critic_system.txt": {
+      "sha256": "545bd8213e567f1977ec4e15b6e2e5315056b5c0ccab6b01a60dc272b38b88c8",
+      "max_output_tokens_research": 2048
+    },
+    "flat_system.txt": {
+      "sha256": "b0bb11e6ff492fdacc4edc1d7fa852b595c1c6c9039872dd09e7dc77082ca412",
+      "max_output_tokens_generate": 4096,
+      "max_output_tokens_select": 2048,
+      "max_output_tokens_commit": 4096
+    }
+  },
+  "forbidden_whole_words_case_insensitive": ["Null", "hidden", "state", "property", "invariant", "concept"],
+  "raw_model_reasoning_cross_role": false,
+  "external_tools": false,
+  "persistent_provider_interaction": false,
+  "notes": "Design-only prompt freeze. These files do not replace the operational V0 prompt files unless a later referee ruling authorizes V1 implementation."
+}
