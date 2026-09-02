@@ -1,0 +1,166 @@
+{
+  "schema_freeze_version": "v1-design-1",
+  "status": "FROZEN_FOR_REFEREE_REVIEW_NOT_IMPLEMENTED",
+  "agent_facing": {
+    "PartitionHypothesis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "hypothesis_id", "group_count", "entity_group"],
+      "properties": {
+        "schema_version": {"const": "1.0"},
+        "hypothesis_id": {"type": "string", "pattern": "^H-[A-Za-z0-9_-]{1,48}$"},
+        "group_count": {"type": "integer", "minimum": 2, "maximum": 4},
+        "entity_group": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "entity_00", "entity_01", "entity_02", "entity_03",
+            "entity_04", "entity_05", "entity_06", "entity_07",
+            "entity_08", "entity_09", "entity_10", "entity_11",
+            "entity_12", "entity_13", "entity_14", "entity_15"
+          ],
+          "properties": {
+            "entity_00": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_01": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_02": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_03": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_04": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_05": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_06": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_07": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_08": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_09": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_10": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_11": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_12": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_13": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_14": {"type": "integer", "minimum": 0, "maximum": 3},
+            "entity_15": {"type": "integer", "minimum": 0, "maximum": 3}
+          }
+        }
+      },
+      "x-broker-validations": [
+        "Every entity_group value MUST be < group_count.",
+        "The used labels MUST equal exactly {0,...,group_count-1} before canonical relabeling.",
+        "Every group MUST contain at least 2 entities.",
+        "group_count MUST be <= floor(sqrt(16)) = 4.",
+        "The Broker canonicalizes class labels by ascending minimum entity_id without changing class membership."
+      ]
+    },
+    "CandidatePartitionSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidates"],
+      "properties": {
+        "candidates": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 4,
+          "items": {"$ref": "#/agent_facing/PartitionHypothesis"}
+        }
+      },
+      "x-broker-validations": [
+        "hypothesis_id values MUST be unique within a CandidatePartitionSet.",
+        "Each candidate is canonicalized before role-to-role handoff."
+      ]
+    },
+    "AInterventionProposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["experiment_id", "objective", "paradigm", "entity_id", "action_value", "target_hypothesis_ids"],
+      "properties": {
+        "experiment_id": {"type": "string", "pattern": "^E-[A-Za-z0-9_-]{1,48}$"},
+        "objective": {"enum": ["discriminate", "estimate"]},
+        "paradigm": {"const": "A"},
+        "entity_id": {
+          "enum": [
+            "entity_00", "entity_01", "entity_02", "entity_03",
+            "entity_04", "entity_05", "entity_06", "entity_07",
+            "entity_08", "entity_09", "entity_10", "entity_11",
+            "entity_12", "entity_13", "entity_14", "entity_15"
+          ]
+        },
+        "action_value": {"type": "integer", "minimum": 0, "maximum": 7},
+        "target_hypothesis_ids": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^H-[A-Za-z0-9_-]{1,48}$"}
+        }
+      }
+    },
+    "AExperimentBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["experiments"],
+      "properties": {
+        "experiments": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "items": {"$ref": "#/agent_facing/AInterventionProposal"}
+        }
+      },
+      "x-broker-validations": [
+        "experiment_id values MUST be unique within the run.",
+        "Every intervention consumes one A-discovery budget unit, including repeats."
+      ]
+    },
+    "ACommitDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "partition"],
+      "properties": {
+        "decision": {"enum": ["commit", "abstain"]},
+        "partition": {
+          "oneOf": [
+            {"$ref": "#/agent_facing/PartitionHypothesis"},
+            {"type": "null"}
+          ]
+        }
+      },
+      "x-broker-validations": [
+        "decision=commit requires a non-null partition.",
+        "decision=abstain requires partition=null.",
+        "Commit is accepted only after exactly 60 A-discovery observations.",
+        "There is no second commit attempt."
+      ]
+    }
+  },
+  "trusted_internal_records": {
+    "AGateChallenge": {
+      "fields": {
+        "slot": "integer 0..3",
+        "entity_id": "entity_00..entity_15",
+        "action_value": "integer 0..7",
+        "canonical_group": "integer 0..3",
+        "predicted_y": "integer 0..7",
+        "source_cell_support_entities": "sorted array of >=2 distinct entity IDs",
+        "source_cell_support_count": "integer >=2"
+      },
+      "sealed_until_gate_adjudication": true
+    },
+    "BCalibrationRecord": {
+      "fields": {
+        "slot": "integer 0..31",
+        "entity_id": "entity_00..entity_15",
+        "action_value": "integer 0..7",
+        "canonical_group": "integer 0..3",
+        "y": "integer 0..7"
+      }
+    },
+    "BTransferPrediction": {
+      "fields": {
+        "slot": "integer 0..31",
+        "entity_id": "entity_00..entity_15",
+        "action_value": "integer 0..7",
+        "canonical_group": "integer 0..3",
+        "cell_status": "defined|inconsistent|missing",
+        "predicted_y": "integer 0..7 or null",
+        "forced_failure": "boolean"
+      },
+      "rule": "predicted_y is non-null iff cell_status=defined; inconsistent or missing cells set forced_failure=true and score incorrect."
+    }
+  }
+}
