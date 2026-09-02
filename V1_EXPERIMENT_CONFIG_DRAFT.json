@@ -1,0 +1,112 @@
+{
+  "protocol": "Archimedes-V1-direct-entity-transfer",
+  "status": "DESIGN_FROZEN_FOR_REFEREE_REVIEW",
+  "execution_authorized": false,
+  "tool_assisted_v0": "ABANDONED",
+  "public_geometry": {
+    "entities": 16,
+    "actions": 8,
+    "outcomes": 8,
+    "measurement_noise_rate": 0.02,
+    "representational_domain": "finite_discrete"
+  },
+  "partition": {
+    "minimum_group_count": 2,
+    "maximum_group_count": 4,
+    "maximum_rule": "floor(sqrt(entity_count))",
+    "minimum_entities_per_group": 2,
+    "canonical_relabel": "ascending minimum entity_id per equivalence class"
+  },
+  "observation_budget": {
+    "A_discovery": 60,
+    "A_empirical_gate": 4,
+    "B_calibration": 32,
+    "B_transfer": 32,
+    "total": 128
+  },
+  "a_gate": {
+    "entity_action_repeat_reduction": "unique_mode_else_undefined",
+    "cell_minimum_distinct_entity_support": 2,
+    "cell_prediction": "strict_majority_else_ineligible",
+    "challenge_count": 4,
+    "challenge_cells_must_be_distinct": true,
+    "challenge_pair_must_be_unobserved_in_A_discovery": true,
+    "threshold": 0.90,
+    "effective_required_correct": 4,
+    "attempts": 1,
+    "gate_budget_charged_before_semantic_validation": true
+  },
+  "b_lookup": {
+    "calibration_count": 32,
+    "transfer_count": 32,
+    "cell_defined_iff_all_calibration_outcomes_identical": true,
+    "inconsistent_cell_policy": "forced_transfer_failure",
+    "majority_vote": false,
+    "smoothing": false,
+    "transfer_entity_action_seen_in_calibration": false
+  },
+  "model_calls": {
+    "full": {
+      "A_rounds": 6,
+      "conjecturer_generate": 6,
+      "critic_select": 6,
+      "A_commit": 1,
+      "total": 13,
+      "max_output_tokens": 40960
+    },
+    "flat": {
+      "A_rounds": 6,
+      "generate": 6,
+      "select": 6,
+      "A_commit": 1,
+      "total": 13,
+      "max_output_tokens": 40960
+    },
+    "B_model_calls": 0
+  },
+  "model": {
+    "provider": "Google Gemini Developer API",
+    "api_surface": "Gemini Interactions API",
+    "model_id": "gemini-3.7-flash",
+    "thinking_level": "high",
+    "structured_output": true,
+    "built_in_tools": false,
+    "persistent_interactions": false,
+    "same_model_all_roles": true,
+    "exact_returned_model_version_must_be_logged": true,
+    "version_change_policy": "abort_before_further_exposure_and_return_to_referee"
+  },
+  "compute_audit": {
+    "metric": "provider_total_tokens",
+    "ratio": "Full/Flat",
+    "full_win_invalid_if_ratio_gt": 1.05,
+    "ratio_lt": 0.95,
+    "ratio_lt_interpretation": "conservative Flat compute advantage; does not invalidate Full win",
+    "posthoc_topups": false
+  },
+  "null": {
+    "worlds": 100,
+    "positive_definition": "committed partition passes empirical A gate and advances to B",
+    "fpr_must_be_strictly_below": 0.05,
+    "kill_at_positive_count": 5
+  },
+  "causal": {
+    "paired_worlds": 100,
+    "per_world_score": "B_transfer_exact_correct/32 if transfer reached else 0.0",
+    "secondary_D4_threshold": 0.90
+  },
+  "primary_analysis": {
+    "test": "one-sided paired sign-flip randomization",
+    "draws": 100000,
+    "rng_seed": 20260830,
+    "alpha": 0.05,
+    "minimum_mean_full_minus_flat_advantage": 0.05,
+    "success_requires_both_significance_and_effect_floor": true
+  },
+  "benchmark_firewall": {
+    "causal_or_null_LLM_exposure_authorized": false,
+    "implementation_tests": "independent synthetic fixtures only",
+    "ground_truth_partition_used_for_V1_scheduling": false,
+    "hidden_B_split_used_for_V1_scheduling": false
+  }
+}
