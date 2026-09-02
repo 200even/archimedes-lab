@@ -13,8 +13,9 @@
       "flat": 22,
       "full": 22
     },
-    "proposed_realized_compute_ratio_band": [0.95, 1.05],
-    "status": "PENDING_REFEREE_RULING"
+    "realized_compute_ratio_band": [0.95, 1.05],
+    "rule": "A Full win is invalid if aggregate Full/Flat realized provider-token ratio exceeds 1.05; Flat compute advantage below 0.95 does not invalidate a Full win.",
+    "status": "REFEREE_ACCEPTED_FOR_SUCCESSOR_USE_ONLY"
   },
   "execution_authorized": false,
   "max_output_tokens": {
@@ -53,23 +54,25 @@
       "total_max_calls": 22
     }
   },
-  "status": "SELECTION_PLAN_HOLD_REVISED_NOT_AUTHORIZED_FOR_EXPOSURE",
+  "status": "TOOL_ASSISTED_V0_TERMINATED_BENCHMARK_SEALED",
   "synthesis": {
-    "implementation": null,
+    "implementation": "EnumerativeSynthesizer V0.2",
     "qualification": {
       "ast_count": 1000,
       "distribution": "uniform_over_canonical_syntactic_asts",
+      "executed_v02": false,
       "grammar_max_depth": 5,
       "hidden_world_generator_import_forbidden": true,
       "minimum_recovery_rate": 0.95,
-      "rng_seed": null,
       "search_ceiling": null
     },
     "search_latent_assignments": false,
     "shared_identically_across_arms": true,
-    "version": null
+    "status": "ABANDONED_BY_REFEREE_BEFORE_V02_QUALIFICATION",
+    "version": "V0.2"
   },
   "worlds": {
+    "benchmark_exposed_to_language_model": false,
     "causal_paired_per_arm": 100,
     "null_full": 100
   }
