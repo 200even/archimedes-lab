@@ -1,10 +1,12 @@
 # EnumerativeSynthesizer V0.2 — Feasible-First Schedule Freeze
 
-**Status:** FROZEN BEFORE IMPLEMENTATION
+**Status:** AMENDED AND FROZEN BEFORE EXACT-FIRST IMPLEMENTATION
 
-This document preregisters the exact deterministic search sequence authorized as the final prequalification engineering correction for `EnumerativeSynthesizer V0.2`.
+This document preregisters the exact deterministic search sequence authorized for the final prequalification engineering correction to `EnumerativeSynthesizer V0.2`.
 
-Nothing in this schedule changes the Theory AST grammar, latent-partition firewall, candidate semantics, objective hierarchy, qualification corpus, qualification threshold, Z3 package/version, or cumulative solver resource limit. It changes only the order in which already-authorized feasibility and optimization constraints are presented to Z3.
+The original feasible-first schedule was frozen before implementation. After independent synthetic validation showed that midpoint Hamming bounds could consume the resource budget while a trivial fallback incumbent existed, the referee authorized one and only one schedule clarification: query the mathematical Hamming lower bound `E <= 0` immediately after the fallback incumbent, before any intermediate Hamming bound.
+
+Nothing in this amendment changes the Theory AST grammar, latent-partition firewall, candidate semantics, objective hierarchy, qualification corpus, qualification threshold, Z3 package/version, CEGIS counterexample policy, or cumulative solver resource limit. It changes only the deterministic order in which already-authorized feasibility and optimization constraints are presented to Z3.
 
 ## Frozen resources and ordering
 
@@ -17,7 +19,7 @@ Nothing in this schedule changes the Theory AST grammar, latent-partition firewa
 - CEGIS working set starts with exactly the first canonically ordered observation: `W={o_0}`
 - whenever a SAT model violates the full observation set `O` under the currently tested bound, append exactly the first canonical violating observation not already in `W`
 - all returned models are decoded and checked by the trusted Python evaluator against full `O`
-- no stochastic restart, alternate solver, target-specific rule, operator preference, structural template, or grammar weighting is permitted
+- no stochastic restart, alternate solver, target-specific rule, operator preference, structural template, grammar weighting, or qualification-derived heuristic is permitted
 - if any required Z3 check returns `unknown` or exhausts the cumulative resource ledger, optimization terminates immediately and the best full-`O`-verified legal incumbent found so far is returned; if no such incumbent exists, the search fails gracefully
 
 For any verified candidate `c`, define the trusted score tuple
@@ -33,35 +35,66 @@ where:
 
 The anytime incumbent is always the lexicographically smallest `S(c)` among all full-`O`-verified candidates encountered so far.
 
-## Phase 0 — Establish a feasible incumbent
+## Frozen sequence
 
-Before attempting to prove any lower bound, perform one CEGIS feasibility search with the maximally permissive bounds allowed by the frozen hypothesis class:
+The sequence is exactly:
+
+**Fallback -> `E <= 0` -> binary tightening of any remaining Hamming interval -> node tightening -> depth tightening -> canonical tie-break.**
+
+No phase may be reordered or skipped except where a preceding result mathematically fixes the optimum, as specified below.
+
+## Phase 0 — Establish a fallback incumbent
+
+Before attempting any optimized bound, perform one CEGIS feasibility search with the maximally permissive bounds allowed by the frozen hypothesis class:
 
 - Hamming bound: `E <= |O|`
-- active-node bound: `N <= N_max`, where `N_max = 2^max_depth - 1`
-- depth bound: `D <= max_depth`
+- no effective node-count minimization; membership in the frozen maximum AST skeleton only
+- no effective depth minimization; membership in the frozen maximum AST skeleton only
 - no canonical-prefix restriction
 
-Because these bounds impose no optimization preference beyond membership in the existing legal grammar, this phase asks only for any legal bounded AST. Every SAT model is decoded and verified against full `O`. The first full-`O`-verified legal candidate becomes the initial incumbent.
+Every SAT model is decoded and verified against full `O`. The first full-`O`-verified legal candidate becomes the initial anytime incumbent.
 
-If this phase returns `unknown` or exhausts the cumulative rlimit before producing an incumbent, the invocation fails gracefully. No later optimization phase is entered.
+If this phase returns `unknown` or exhausts the cumulative rlimit before producing an incumbent, the invocation fails gracefully. No later phase is entered.
 
-## Phase 1 — Minimize full-observation Hamming error
+## Phase 1A — Exact-first Hamming query
 
-Let the incumbent's verified error be `e_inc`.
+Immediately after Phase 0, issue exactly one CEGIS feasibility query at the mathematical lower bound:
 
-Search for the minimum feasible Hamming bound by deterministic binary tightening over integer bounds:
+- `E <= 0`
+- `node_bound = None`
+- `depth_bound = None`
+- no canonical-prefix restriction
 
-1. initialize `lo = 0`, `hi = e_inc`;
-2. while `lo < hi`:
-   - set `mid = floor((lo + hi) / 2)`;
-   - run the same deterministic CEGIS feasibility procedure under `E <= mid`, with `N <= N_max` and `D <= max_depth`;
-   - if full-`O` feasibility is established, update the incumbent if the verified candidate improves `S(c)`, and set `hi = min(mid, E(candidate))`;
-   - if the working-set constraints are proven UNSAT, set `lo = mid + 1`;
-   - if the solver returns `unknown` or the cumulative rlimit is exhausted, terminate and return the current incumbent.
-3. when `lo == hi`, the minimum Hamming bound is `E* = lo`, provided the phase completed without `unknown`.
+The only structural restrictions are those intrinsic to the already-frozen maximum syntax skeleton and legal Theory AST grammar. In particular, **no node-count or depth minimization constraint is permitted on this query**.
 
-No node-count or operator preference is used to select Hamming bounds.
+Outcomes:
+
+1. **Feasible:** verify the candidate against full `O`, update the incumbent, set `E* = 0`, and skip Phase 1B because zero is the mathematical minimum Hamming error.
+2. **Proven infeasible:** proceed to Phase 1B over the remaining interval `[1, e_inc]`, where `e_inc` is the current incumbent's verified Hamming error.
+3. **Unknown / cumulative rlimit exhausted:** terminate optimization immediately and return the current fallback incumbent.
+
+No alternative exact-fit query, restart, or different constraint encoding is allowed.
+
+## Phase 1B — Binary tightening of the remaining Hamming interval
+
+This phase is entered **only** if `E <= 0` was proven infeasible.
+
+Let the current incumbent's verified Hamming error be `e_inc`. Initialize:
+
+- `lo = 1`
+- `hi = e_inc`
+
+While `lo < hi`:
+
+1. set `mid = floor((lo + hi) / 2)`;
+2. run deterministic CEGIS under `E <= mid` with `node_bound = None`, `depth_bound = None`, and no canonical-prefix restriction;
+3. if full-`O` feasibility is established, update the incumbent if the verified candidate improves `S(c)` and set `hi = min(mid, E(candidate))`;
+4. if the working-set constraints are proven UNSAT, set `lo = mid + 1`;
+5. if the solver returns `unknown` or the cumulative rlimit is exhausted, terminate and return the current incumbent.
+
+When `lo == hi`, set `E* = lo`, provided the phase completed without `unknown`. If the incumbent does not yet realize `E*`, issue exactly one witness query at `E <= E*`, still with `node_bound = None` and `depth_bound = None`. If that witness query cannot complete, return the current incumbent.
+
+No node-count, depth, operator, or canonical preference is used during Hamming minimization.
 
 ## Phase 2 — Minimize active node count
 
@@ -70,11 +103,13 @@ Only after `E*` has been established, minimize node count while preserving `E <=
 1. initialize `lo = 1`, `hi = N(incumbent)`;
 2. while `lo < hi`:
    - set `mid = floor((lo + hi) / 2)`;
-   - run deterministic CEGIS with `E <= E*`, `N <= mid`, and `D <= max_depth`;
+   - run deterministic CEGIS with `E <= E*`, `N <= mid`, and no tighter depth constraint than the frozen maximum skeleton;
    - on feasible, update the incumbent if `S(c)` improves and set `hi = min(mid, N(candidate))`;
    - on UNSAT, set `lo = mid + 1`;
    - on `unknown` or cumulative rlimit exhaustion, terminate and return the current incumbent.
 3. the completed optimum is `N* = lo`.
+
+If the incumbent does not realize `N*`, issue exactly one witness query at `E <= E*`, `N <= N*`, with no tighter depth constraint. If that query cannot complete, return the current incumbent.
 
 ## Phase 3 — Minimize depth
 
@@ -88,6 +123,8 @@ Only after `E*` and `N*` are established, minimize depth.
    - on UNSAT, set `lo = mid + 1`;
    - on `unknown` or cumulative rlimit exhaustion, terminate and return the current incumbent.
 3. the completed optimum is `D* = lo`.
+
+If the incumbent does not realize `D*`, issue exactly one witness query at the fixed `E*`, `N*`, and `D*` bounds. If that query cannot complete, return the current incumbent.
 
 ## Phase 4 — Canonical AST tie-break
 
@@ -110,7 +147,7 @@ The qualification run uses `limit=1` as already frozen.
 
 ## Qualification and terminal rule
 
-After implementation:
+After implementation of this exact schedule:
 
 1. run only independent synthetic fixtures and exhaustive small-depth grammar tests;
 2. require the synthetic test suite to pass;
