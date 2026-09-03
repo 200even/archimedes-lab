@@ -4,7 +4,7 @@
 
 This document preregisters the exact provider-transport semantics proposed for V1 before any live Gemini call is used for the Critic safeguard or any causal/Null benchmark exposure.
 
-The implementation is `archimedes_v0/v1_gemini_backend.py`. All current tests use an injected fake HTTP transport; no live Gemini request has been made by this implementation.
+The implementation is `archimedes_v0/v1_gemini_backend.py`, with provider-schema projection in `archimedes_v0/v1_agent_interfaces.py`. All current tests use an injected fake HTTP transport; no live Gemini request has been made by this implementation.
 
 ## 1. Why direct REST
 
@@ -47,7 +47,7 @@ Every request body contains exactly these scientific-control fields:
   "response_format": {
     "type": "text",
     "mime_type": "application/json",
-    "schema": "<exact frozen role schema>"
+    "schema": "<deterministic provider projection of normative V1 schema>"
   },
   "stream": false,
   "store": false,
@@ -89,13 +89,29 @@ Thought summaries are deliberately suppressed. The adapter ignores `thought` ste
 
 Provider usage accounting retains numeric `total_thought_tokens` when reported.
 
-## 5. Structured output
+## 5. Structured output and normative-schema firewall
 
-The provider receives the exact authorized static JSON schema loaded from `V1_SCHEMA_FREEZE.json`.
+`V1_SCHEMA_FREEZE.json` remains the **normative scientific schema**. Trusted Pydantic and Broker validation determine whether a model response is scientifically admissible.
 
-The only transformation is moving internal references from `#/agent_facing/<Name>` to standard JSON-Schema `$defs` references so that the same frozen constraints form a self-contained provider schema. No cardinality, entity-key, batch-size, or other scientific constraint changes.
+During implementation review, the current Gemini structured-output documentation was checked against that frozen schema. Gemini documents only a subset of JSON Schema. The normative V1 schema contains several keywords that are not currently documented in that subset, specifically `pattern`, `uniqueItems`, `const`, and `oneOf`. Sending those fields unmodified would create an unnecessary provider-compatibility failure before the scientific validator ever runs.
 
-The adapter requires a completed response whose model-output text parses as one JSON object. Pydantic/Broker validation then applies the trusted semantic contract.
+Therefore the provider receives one deterministic, preregistered projection of the normative schema:
+
+1. internal `#/agent_facing/<Name>` references are recursively **inlined**;
+2. `const: X` becomes the semantically equivalent `enum: [X]` with an inferred primitive type;
+3. `oneOf` becomes `anyOf`; in V1 the affected alternatives are object-vs-null and therefore type-disjoint, so this does not change accepted values;
+4. provider-undocumented `pattern` is omitted from the provider layer only;
+5. provider-undocumented `uniqueItems` is omitted from the provider layer only;
+6. `x-broker-validations` metadata is omitted from the provider layer;
+7. all documented structural constraints are retained, including object properties/required/additionalProperties, enums, integer minima/maxima, array items/minItems/maxItems, and the hard `2 <= group_count <= 4` bound.
+
+The trusted validators still enforce every omitted normative rule after the response, including identifier patterns, uniqueness requirements, complete partition semantics, cardinality, minimum entities per class, experiment-ID uniqueness, and commit semantics.
+
+**Consequently, the provider projection can make structured generation more permissive, but it cannot widen the scientific hypothesis class.** A provider-generated object that violates any normative rule is rejected with no semantic retry.
+
+This compatibility projection is frozen before any live provider call and is applied identically to Full and Flat. CI recursively rejects provider schemas containing `$ref`, `$defs`, `oneOf`, `const`, `pattern`, or `uniqueItems` and separately asserts that the scientific cardinality/batch constraints survive the projection.
+
+The adapter requires a completed response whose model-output text parses as one JSON object. Pydantic/Broker validation then applies the normative contract.
 
 Unexpected function/tool/action steps are fatal provider-protocol errors because V1 declares no tools and freezes `tool_choice=none`.
 
@@ -185,6 +201,8 @@ Before any live provider call, please rule on:
 
 **C. Timeout:** Accept a single-attempt 300-second client timeout as an operational bound rather than a scientific compute allocation.
 
-**D. Model-version limitation:** Accept that the Interactions API exposes the returned stable model identifier but no separately documented immutable serving-build identifier in the Interaction response; therefore reproducibility claims will be limited accordingly.
+**D. Provider-schema projection:** Accept the deterministic supported-subset projection above, with `V1_SCHEMA_FREEZE.json` and trusted validators remaining normative and no semantic retry.
 
-**E. Next live operation:** If A-D are accepted, authorize only the three preregistered Critic safeguard calls. Do not authorize causal/Null benchmark exposure yet.
+**E. Model-version limitation:** Accept that the Interactions API exposes the returned stable model identifier but no separately documented immutable serving-build identifier in the Interaction response; therefore reproducibility claims will be limited accordingly.
+
+**F. Next live operation:** If A-E are accepted, authorize only the three preregistered Critic safeguard calls. Do not authorize causal/Null benchmark exposure yet.
