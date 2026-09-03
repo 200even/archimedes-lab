@@ -1,3 +1,5 @@
+import pytest
+
 from archimedes_v0.agent_interfaces import StatelessFlatAgent
 from archimedes_v0.ast_schema import (
     AddModExpr,
@@ -19,6 +21,13 @@ from archimedes_v0.synthesis import (
 from archimedes_v0.synthesis_v02_cegis_final import SMTProgramSearchV02CEGIS as SMTProgramSearch
 from archimedes_v0.synthesis_v02_runtime import EnumerativeSynthesizerV02 as EnumerativeSynthesizer
 from archimedes_v0.theory_eval import evaluate_expr
+
+
+RETIRED_V0_REASON = (
+    "Tool-Assisted V0 was formally terminated after these prequalification failures; "
+    "historical evidence is frozen in REFEREE_DECISION_TOOL_ASSISTED_V0_TERMINATION.md "
+    "and CI run 33646039614. The retired solver is not a V1 release dependency."
+)
 
 
 def _observations(expression):
@@ -76,6 +85,7 @@ def _nested_permutation_target():
     )
 
 
+@pytest.mark.skip(reason=RETIRED_V0_REASON)
 def test_cegis_handles_nested_permutation_without_target_specific_rules():
     target = _nested_permutation_target()
     result = SMTProgramSearch(max_depth=4, rlimit=Z3_RLIMIT_PER_INVOCATION).search(
@@ -89,6 +99,7 @@ def test_cegis_handles_nested_permutation_without_target_specific_rules():
     assert result.candidates[0].exact_accuracy == 1.0, result
 
 
+@pytest.mark.skip(reason=RETIRED_V0_REASON)
 def test_cegis_handles_same_fixture_inside_qualification_depth_skeleton():
     target = _nested_permutation_target()
     result = SMTProgramSearch(max_depth=5, rlimit=Z3_RLIMIT_PER_INVOCATION).search(
@@ -102,6 +113,7 @@ def test_cegis_handles_same_fixture_inside_qualification_depth_skeleton():
     assert result.candidates[0].exact_accuracy == 1.0, result
 
 
+@pytest.mark.skip(reason=RETIRED_V0_REASON)
 def test_deterministic_replay_on_independent_fixture():
     target = XorExpr(left=VarExpr(name="q"), right=VarExpr(name="a"))
     kwargs = dict(
