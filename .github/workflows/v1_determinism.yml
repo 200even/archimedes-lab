@@ -9,6 +9,8 @@ on:
       - 'V1_SCHEDULE_DIGEST_MANIFEST.json'
       - 'V1_SCHEMA_FREEZE.json'
       - 'V1_PROMPT_MANIFEST.json'
+      - 'V1_CRITIC_QUALIFICATION_FIXTURES.json'
+      - 'V1_PROVIDER_ADAPTER_FREEZE_DRAFT.md'
       - 'v1_design/prompts/**'
       - 'pyproject.toml'
       - 'requirements.txt'
