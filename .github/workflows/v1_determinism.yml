@@ -1,0 +1,60 @@
+name: V1 Determinism
+
+on:
+  push:
+    paths:
+      - 'archimedes_v0/v1_*.py'
+      - 'tests/test_v1_*.py'
+      - 'scripts/v1_schedule_digest.py'
+      - 'V1_SCHEDULE_DIGEST_MANIFEST.json'
+      - '.github/workflows/v1_determinism.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        hashseed: [0, 1, 42, 314159]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.14'
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e . pytest
+      - name: Run V1 integrity tests
+        env:
+          PYTHONHASHSEED: ${{ matrix.hashseed }}
+        run: pytest -q tests/test_v1_protocol.py tests/test_v1_broker.py tests/test_v1_orchestrator.py
+      - name: Emit frozen schedule digest
+        env:
+          PYTHONHASHSEED: ${{ matrix.hashseed }}
+        run: python scripts/v1_schedule_digest.py | tee v1-digest-${{ matrix.hashseed }}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v1-digest-${{ matrix.hashseed }}
+          path: v1-digest-${{ matrix.hashseed }}.json
+
+  compare:
+    needs: digest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: v1-digest-*
+          path: digests
+          merge-multiple: true
+      - name: Require byte-identical outputs across hash seeds
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=digests/v1-digest-0.json
+          for f in digests/v1-digest-*.json; do
+            cmp "$base" "$f"
+          done
+          cat "$base"
