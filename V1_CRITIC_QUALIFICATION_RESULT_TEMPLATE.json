@@ -1,0 +1,78 @@
+{
+  "package_version": "v1-critic-qualification-1",
+  "status": "FROZEN_TEMPLATE_BEFORE_LIVE_CALLS",
+  "terminal_execution_class": null,
+  "execution_commit_sha": null,
+  "fixture_set": null,
+  "fixture_file_sha256": null,
+  "cycles": [
+    {
+      "cycle_index": 0,
+      "cycle_id": null,
+      "target_entity_id": null,
+      "target_action_value": null,
+      "selected_batch": null,
+      "selected_revealing_intervention": null,
+      "interaction_id": null,
+      "returned_model": null,
+      "provider_status": null,
+      "request_sha256": null,
+      "response_text_sha256": null,
+      "usage": {
+        "total_input_tokens": null,
+        "total_output_tokens": null,
+        "total_thought_tokens": null,
+        "total_tool_use_tokens": null,
+        "total_tokens": null
+      },
+      "semantic_validation_error": null
+    },
+    {
+      "cycle_index": 1,
+      "cycle_id": null,
+      "target_entity_id": null,
+      "target_action_value": null,
+      "selected_batch": null,
+      "selected_revealing_intervention": null,
+      "interaction_id": null,
+      "returned_model": null,
+      "provider_status": null,
+      "request_sha256": null,
+      "response_text_sha256": null,
+      "usage": {
+        "total_input_tokens": null,
+        "total_output_tokens": null,
+        "total_thought_tokens": null,
+        "total_tool_use_tokens": null,
+        "total_tokens": null
+      },
+      "semantic_validation_error": null
+    },
+    {
+      "cycle_index": 2,
+      "cycle_id": null,
+      "target_entity_id": null,
+      "target_action_value": null,
+      "selected_batch": null,
+      "selected_revealing_intervention": null,
+      "interaction_id": null,
+      "returned_model": null,
+      "provider_status": null,
+      "request_sha256": null,
+      "response_text_sha256": null,
+      "usage": {
+        "total_input_tokens": null,
+        "total_output_tokens": null,
+        "total_thought_tokens": null,
+        "total_tool_use_tokens": null,
+        "total_tokens": null
+      },
+      "semantic_validation_error": null
+    }
+  ],
+  "consecutive_misses": null,
+  "passes_safeguard": null,
+  "provider_failure": null,
+  "benchmark_exposure_occurred": false,
+  "notes": "Template only. Live-result generation must preserve this field structure and the packaging rules in V1_CRITIC_QUALIFICATION_PACKAGE_SPEC.md."
+}
