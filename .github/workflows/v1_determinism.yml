@@ -23,6 +23,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: v1-determinism-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   digest:
     runs-on: ubuntu-latest
