@@ -32,10 +32,10 @@ jobs:
           python-version: '3.12.14'
       - run: python -m pip install --upgrade pip
       - run: pip install -e . pytest==9.1.1
-      - name: Run V1 integrity tests
+      - name: Run complete V1 integrity suite
         env:
           PYTHONHASHSEED: ${{ matrix.hashseed }}
-        run: pytest -q tests/test_v1_protocol.py tests/test_v1_broker.py tests/test_v1_orchestrator.py
+        run: pytest -q tests/test_v1_*.py
       - name: Emit frozen schedule digest
         env:
           PYTHONHASHSEED: ${{ matrix.hashseed }}
