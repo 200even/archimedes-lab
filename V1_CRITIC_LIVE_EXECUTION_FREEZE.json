@@ -1,0 +1,34 @@
+{
+  "status": "FROZEN_FOR_AUTHORIZED_THREE_CALL_CRITIC_SAFEGUARD",
+  "authorized_live_critic_calls": 3,
+  "benchmark_exposure_authorized": false,
+  "frozen_code_commit_sha": "0041d6cadf1bb28574977bbce14ba4fe51b58503",
+  "pre_call_v1_determinism": {
+    "run_id": 33754645287,
+    "head_sha": "0041d6cadf1bb28574977bbce14ba4fe51b58503",
+    "conclusion": "success",
+    "workflow": "V1 Determinism",
+    "run_number": 24
+  },
+  "gemini_secret_preflight": {
+    "run_id": 33754460605,
+    "run_attempt": 2,
+    "head_sha": "de4fa3e351c961219d753217b369cb107e1064c4",
+    "conclusion": "success",
+    "provider_requests_sent": 0
+  },
+  "provider_contract": {
+    "model": "gemini-3.7-flash",
+    "api_revision": "2026-05-20",
+    "seed": 20260902,
+    "thinking_level": "high",
+    "thinking_summaries": "none",
+    "timeout_seconds": 300.0,
+    "automatic_retries": 0
+  },
+  "fixture_set": "V1-Critic-Safeguard-1",
+  "authorization_source": "REFEREE_DECISION_V1_PROVIDER_ADAPTER_ACCEPTED.md",
+  "live_workflow": ".github/workflows/v1_critic_qualification_live.yml",
+  "result_package_spec": "V1_CRITIC_QUALIFICATION_PACKAGE_SPEC.md",
+  "notes": "Frozen after successful four-hash-seed V1 determinism CI and successful non-provider credential preflight. This manifest authorizes only the three preregistered Critic safeguard calls and does not authorize causal or Null benchmark exposure."
+}
