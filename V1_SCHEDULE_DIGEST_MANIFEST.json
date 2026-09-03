@@ -1,0 +1,25 @@
+{
+  "combined_sha256": "295888922dc662549a235f55795b5d810fdab31b2b86a6b196f9a2232af3d459",
+  "fixtures": {
+    "balanced_k2": {
+      "calibration_digest": "9f3203fccbee80b0f678608fec85bd6266192eeeb2d12f1cfab31014df0a6fd3",
+      "partition_digest": "9e9401ddb50ca8609640b99e8f19b6f8dca085bf63b680d676207526676c9344",
+      "transfer_digest": "a703734e13872c8c26cd1d1690e1f4dc527618169d18920de166bc91a374eca0"
+    },
+    "balanced_k4": {
+      "calibration_digest": "dbf16453b2695399ddd4a6b816b7301d146595f6bcc6c19fd5a853b46ac5f4ba",
+      "partition_digest": "53819dfcd0efc4b26487b8717073411d19077a4c4a9b4bb67d06f08c01154aa1",
+      "transfer_digest": "d5aef97477689fd53108a49ad17ffe3fc3658d4ddfe7510f92d3a2ac199b6009"
+    },
+    "metamorphic_k4": {
+      "calibration_digest": "db08c9eabfb33b3fa82486e4e76b44926092f803263ec8df626b2452e82e0c4c",
+      "partition_digest": "3ad4bf19a48bf4ad5c9639fa2ac7852d8d7fbcd6229346c82a03cbcb04e15ac2",
+      "transfer_digest": "a7bc8d2f8c334b356c3df94a71d9c2b3379559f45c45a63cf7be08fc77fcd455"
+    },
+    "unbalanced_k3": {
+      "calibration_digest": "27df7ff3657a4320074367ea39598d914e8806b2828c3a1f77f52ed0e16d97c0",
+      "partition_digest": "291c95cad3c923f5a08844046c1dafc9650356dc008e278e1cafc1b1e66dc6a4",
+      "transfer_digest": "1de470153bd6ae1a7b4578cf1829ed1937847ea7c32b5112c35bd0cd00fb2f16"
+    }
+  }
+}
