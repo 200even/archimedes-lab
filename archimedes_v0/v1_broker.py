@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import asdict, dataclass
 from enum import Enum
@@ -19,7 +18,6 @@ from .v1_protocol import (
     AExperimentBatch,
     CanonicalPartition,
     Observation,
-    PartitionHypothesis,
     TransferPrediction,
     build_b_calibration_schedule,
     build_b_lookup,
@@ -70,7 +68,7 @@ class V1Broker:
     """Trusted deterministic V1 boundary.
 
     The model may influence only A discovery interventions and the submitted
-    partition.  Once the partition passes the sealed empirical A gate, all B
+    partition. Once the partition passes the sealed empirical A gate, all B
     scheduling, lookup construction, prediction freezing, and scoring are trusted
     deterministic operations.
     """
@@ -137,6 +135,10 @@ class V1Broker:
             + len(self._b_transfer_observations)
         )
 
+    def close_external_failure(self, outcome: str = "semantic_output_failure") -> V1Result:
+        """Close an arm after an agent-interface failure; no scientific retry."""
+        return self._close(outcome, a_gate_accuracy=None)
+
     def execute_a_batch(self, raw_batch: AExperimentBatch | dict[str, Any]) -> tuple[Observation, ...]:
         if self._phase != V1Phase.A_DISCOVERY:
             raise V1BrokerError("A discovery is closed")
@@ -176,17 +178,21 @@ class V1Broker:
         if self._phase != V1Phase.A_DISCOVERY or len(self._a_observations) != A_DISCOVERY_BUDGET:
             raise V1BrokerError("A commit requires exactly 60 discovery observations")
 
-        # The four-unit gate is charged before semantic validation of any stated
-        # commit, exactly as preregistered.  A malformed object that does not even
-        # express a commit is handled as a schema failure without fabricating a gate.
-        shallow_decision = raw_decision.decision if isinstance(raw_decision, ACommitDecision) else raw_decision.get("decision")
+        if isinstance(raw_decision, ACommitDecision):
+            shallow_decision = raw_decision.decision
+        elif isinstance(raw_decision, dict):
+            shallow_decision = raw_decision.get("decision")
+        else:
+            shallow_decision = None
+
+        # Charge before semantic validation of a stated commit.
         if shallow_decision == "commit":
             self._a_gate_charged = A_GATE_BUDGET
             self._ledger.append("a_gate_budget_charged", {"units": A_GATE_BUDGET}, sealed=True)
 
         try:
             decision = raw_decision if isinstance(raw_decision, ACommitDecision) else ACommitDecision.model_validate(raw_decision)
-        except (ValidationError, AttributeError, TypeError) as exc:
+        except (ValidationError, AttributeError, TypeError):
             return self._close("invalid_commit", a_gate_accuracy=None)
 
         if decision.decision == "abstain":
@@ -195,8 +201,6 @@ class V1Broker:
         if self._a_gate_charged != A_GATE_BUDGET:
             raise AssertionError("commit reached A gate without prepaid four-unit charge")
 
-        # Pydantic has already enforced 2<=k<=4, complete assignment, all labels
-        # used, and >=2 entities per group. Canonicalization changes labels only.
         self._partition = canonicalize_partition(decision.partition)
         self._partition_digest = self._partition.digest()
         self._ledger.append(
@@ -243,7 +247,6 @@ class V1Broker:
         if correct != A_GATE_BUDGET:
             return self._close("a_gate_failure", a_gate_accuracy=accuracy)
 
-        # Freeze the complete B calibration schedule before any B outcome exists.
         self._b_calibration_schedule = build_b_calibration_schedule(self._partition)
         self._b_calibration_schedule_digest = canonical_digest(self._b_calibration_schedule)
         self._ledger.append(
@@ -292,8 +295,6 @@ class V1Broker:
             sealed=True,
         )
 
-        # Selection uses only partition + already-frozen calibration pairs; it is
-        # independent of calibration outcomes even though it is constructed now.
         self._b_transfer_schedule = build_b_transfer_schedule(self._partition, self._b_calibration_schedule)
         self._b_transfer_predictions = build_transfer_predictions(self._b_transfer_schedule, lookup)
         self._b_transfer_prediction_digest = canonical_digest(self._b_transfer_predictions)
@@ -323,7 +324,7 @@ class V1Broker:
             self._b_transfer_observations.append(observation)
             self._ledger.append("b_transfer_outcome", asdict(observation), sealed=True)
 
-        correct, total, accuracy = score_transfer(self._b_transfer_predictions, transfer_outcomes)
+        correct, total, _ = score_transfer(self._b_transfer_predictions, transfer_outcomes)
         return self._close(
             "completed",
             a_gate_accuracy=1.0,
