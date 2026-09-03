@@ -10,7 +10,10 @@ on:
       - 'V1_SCHEMA_FREEZE.json'
       - 'V1_PROMPT_MANIFEST.json'
       - 'V1_CRITIC_QUALIFICATION_FIXTURES.json'
+      - 'V1_CRITIC_QUALIFICATION_PACKAGE_SPEC.md'
+      - 'V1_CRITIC_QUALIFICATION_RESULT_TEMPLATE.json'
       - 'V1_PROVIDER_ADAPTER_FREEZE_DRAFT.md'
+      - 'REFEREE_DECISION_V1_PROVIDER_ADAPTER_ACCEPTED.md'
       - 'v1_design/prompts/**'
       - 'pyproject.toml'
       - 'requirements.txt'
@@ -23,6 +26,7 @@ permissions:
 jobs:
   digest:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -34,10 +38,17 @@ jobs:
           python-version: '3.12.14'
       - run: python -m pip install --upgrade pip
       - run: pip install -e . pytest==9.1.1
-      - name: Run complete V1 integrity suite
+      - name: Run complete V1 integrity suite file-by-file
         env:
           PYTHONHASHSEED: ${{ matrix.hashseed }}
-        run: pytest -q tests/test_v1_*.py
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in tests/test_v1_*.py; do
+            echo "::group::$f"
+            timeout 120s pytest -q "$f"
+            echo "::endgroup::"
+          done
       - name: Emit frozen schedule digest
         env:
           PYTHONHASHSEED: ${{ matrix.hashseed }}
@@ -50,6 +61,7 @@ jobs:
   compare:
     needs: digest
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/download-artifact@v4
         with:
