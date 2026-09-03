@@ -1,0 +1,62 @@
+{
+  "status": "IMPLEMENTED_PRE_EXPOSURE_NOT_AUTHORIZED_FOR_BENCHMARK",
+  "protocol": "Archimedes-V1-direct-entity-transfer",
+  "code_freeze_commit": "b250872661e123d106020341878e788b4335456f",
+  "code_freeze_tree": "0224ce4b27a57d7444425e2b593bf7beed0f83c8",
+  "implementation_files": [
+    "archimedes_v0/v1_protocol.py",
+    "archimedes_v0/v1_broker.py",
+    "archimedes_v0/v1_agent_interfaces.py",
+    "archimedes_v0/v1_orchestrator.py"
+  ],
+  "integrity_tests": [
+    "tests/test_v1_protocol.py",
+    "tests/test_v1_broker.py",
+    "tests/test_v1_orchestrator.py",
+    "tests/test_v1_freeze.py"
+  ],
+  "frozen_documents": {
+    "protocol": "V1_PROTOCOL_SPEC.md",
+    "schemas": "V1_SCHEMA_FREEZE.json",
+    "prompts": "V1_PROMPT_MANIFEST.json",
+    "schedule_digests": "V1_SCHEDULE_DIGEST_MANIFEST.json",
+    "ci_integrity_contract": "V1_B_TRANSFER_CI_INTEGRITY_SPEC.md",
+    "implementation_authorization": "REFEREE_DECISION_V1_IMPLEMENTATION.md"
+  },
+  "environment": {
+    "python": "3.12.14",
+    "pydantic": "2.13.5",
+    "z3_solver": "5.1.0.0",
+    "pytest": "9.1.1",
+    "note": "V1 Broker/scheduling does not use Z3; the exact Z3 pin remains for archived V0 compatibility."
+  },
+  "schedule_integrity": {
+    "combined_sha256": "295888922dc662549a235f55795b5d810fdab31b2b86a6b196f9a2232af3d459",
+    "python_hash_seeds": [0, 1, 42, 314159],
+    "latest_pre_manifest_determinism_run": 33698741099,
+    "latest_pre_manifest_determinism_conclusion": "success"
+  },
+  "resource_contract": {
+    "A_discovery": 60,
+    "A_gate": 4,
+    "B_calibration": 32,
+    "B_transfer": 32,
+    "total": 128,
+    "full_model_calls": 13,
+    "flat_model_calls": 13,
+    "full_max_output_tokens": 40960,
+    "flat_max_output_tokens": 40960,
+    "B_model_calls": 0
+  },
+  "benchmark_firewall": {
+    "causal_world_llm_exposure": false,
+    "null_world_llm_exposure": false,
+    "benchmark_execution_authorized": false,
+    "execution_guard_default": false
+  },
+  "retired_v0": {
+    "tool_assisted_v0_status": "TERMINATED",
+    "decision": "REFEREE_DECISION_TOOL_ASSISTED_V0_TERMINATION.md",
+    "retired_failure_tests_are_skipped_not_repaired": true
+  }
+}
