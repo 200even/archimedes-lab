@@ -7,7 +7,7 @@ from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from .v1_protocol import ACommitDecision, AExperimentBatch, CandidatePartitionSet
+from .v1_protocol import AExperimentBatch, CandidatePartitionSet
 
 
 class V1AgentInterfaceError(RuntimeError):
@@ -59,6 +59,27 @@ def authorized_response_schema(schema_name: str) -> dict[str, Any]:
     return {"$ref": f"#/$defs/{schema_name}", "$defs": defs}
 
 
+def _invoke_raw(
+    backend: StatelessJSONBackend,
+    *,
+    role: str,
+    system_prompt: str,
+    payload: dict[str, Any],
+    frozen_schema_name: str,
+    max_output_tokens: int,
+) -> dict[str, Any]:
+    raw = backend.invoke(
+        role=role,
+        system_prompt=system_prompt,
+        payload=payload,
+        response_schema=authorized_response_schema(frozen_schema_name),
+        max_output_tokens=max_output_tokens,
+    )
+    if not isinstance(raw, dict):
+        raise V1AgentInterfaceError(f"{role} returned non-object structured output")
+    return raw
+
+
 def _invoke_validated(
     backend: StatelessJSONBackend,
     *,
@@ -69,11 +90,12 @@ def _invoke_validated(
     frozen_schema_name: str,
     max_output_tokens: int,
 ) -> T:
-    raw = backend.invoke(
+    raw = _invoke_raw(
+        backend,
         role=role,
         system_prompt=system_prompt,
         payload=payload,
-        response_schema=authorized_response_schema(frozen_schema_name),
+        frozen_schema_name=frozen_schema_name,
         max_output_tokens=max_output_tokens,
     )
     try:
@@ -99,13 +121,19 @@ class V1Conjecturer:
             max_output_tokens=self._max_output_tokens,
         )
 
-    def commit(self, payload: dict[str, Any]) -> ACommitDecision:
-        return _invoke_validated(
+    def commit(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Return raw structured commit JSON so the Broker charges before validation.
+
+        The provider still receives the exact frozen ACommitDecision schema. The
+        trusted Broker, not this role adapter, performs semantic validation after
+        inspecting the top-level decision and charging the four-unit A gate for a
+        stated commit. This preserves the preregistered resource firewall.
+        """
+        return _invoke_raw(
             self._backend,
             role="conjecturer",
             system_prompt=self._prompt,
             payload=payload,
-            response_model=ACommitDecision,
             frozen_schema_name="ACommitDecision",
             max_output_tokens=self._max_output_tokens,
         )
@@ -167,13 +195,12 @@ class V1FlatAgent:
             max_output_tokens=self._select_max_output_tokens,
         )
 
-    def commit(self, payload: dict[str, Any]) -> ACommitDecision:
-        return _invoke_validated(
+    def commit(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return _invoke_raw(
             self._backend,
             role="flat",
             system_prompt=self._prompt,
             payload=payload,
-            response_model=ACommitDecision,
             frozen_schema_name="ACommitDecision",
             max_output_tokens=self._commit_max_output_tokens,
         )
