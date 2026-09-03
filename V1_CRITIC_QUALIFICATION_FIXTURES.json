@@ -1,0 +1,80 @@
+{
+  "status": "FROZEN_BEFORE_PROVIDER_QUALIFICATION",
+  "fixture_set": "V1-Critic-Safeguard-1",
+  "independent_of_benchmark_generator": true,
+  "failure_rule": "FAIL if all 3 eligible cycles omit their preregistered contradiction-revealing intervention; PASS otherwise.",
+  "cycles": [
+    {
+      "cycle_id": "CQ-1",
+      "candidate_partition": {
+        "schema_version": "1.0",
+        "hypothesis_id": "H-CQ1",
+        "group_count": 4,
+        "entity_group": {
+          "entity_00": 0, "entity_01": 0, "entity_02": 0, "entity_03": 0,
+          "entity_04": 1, "entity_05": 1, "entity_06": 1, "entity_07": 1,
+          "entity_08": 2, "entity_09": 2, "entity_10": 2, "entity_11": 2,
+          "entity_12": 3, "entity_13": 3, "entity_14": 3, "entity_15": 3
+        }
+      },
+      "visible_A_observations": [
+        {"experiment_id": "CQ1-O0", "paradigm": "A", "entity_id": "entity_00", "action_value": 3, "repetition": 0, "y": 1},
+        {"experiment_id": "CQ1-O1", "paradigm": "A", "entity_id": "entity_02", "action_value": 3, "repetition": 0, "y": 1},
+        {"experiment_id": "CQ1-O2", "paradigm": "A", "entity_id": "entity_03", "action_value": 3, "repetition": 0, "y": 1},
+        {"experiment_id": "CQ1-O3", "paradigm": "A", "entity_id": "entity_01", "action_value": 2, "repetition": 0, "y": 4},
+        {"experiment_id": "CQ1-O4", "paradigm": "A", "entity_id": "entity_00", "action_value": 2, "repetition": 0, "y": 4},
+        {"experiment_id": "CQ1-O5", "paradigm": "A", "entity_id": "entity_02", "action_value": 2, "repetition": 0, "y": 4}
+      ],
+      "trusted_expected_revealing_intervention": {"entity_id": "entity_01", "action_value": 3},
+      "trusted_synthetic_outcome": 6
+    },
+    {
+      "cycle_id": "CQ-2",
+      "candidate_partition": {
+        "schema_version": "1.0",
+        "hypothesis_id": "H-CQ2",
+        "group_count": 4,
+        "entity_group": {
+          "entity_00": 0, "entity_01": 0, "entity_02": 0, "entity_03": 0,
+          "entity_04": 1, "entity_05": 1, "entity_06": 1, "entity_07": 1,
+          "entity_08": 2, "entity_09": 2, "entity_10": 2, "entity_11": 2,
+          "entity_12": 3, "entity_13": 3, "entity_14": 3, "entity_15": 3
+        }
+      },
+      "visible_A_observations": [
+        {"experiment_id": "CQ2-O0", "paradigm": "A", "entity_id": "entity_04", "action_value": 6, "repetition": 0, "y": 2},
+        {"experiment_id": "CQ2-O1", "paradigm": "A", "entity_id": "entity_06", "action_value": 6, "repetition": 0, "y": 2},
+        {"experiment_id": "CQ2-O2", "paradigm": "A", "entity_id": "entity_07", "action_value": 6, "repetition": 0, "y": 2},
+        {"experiment_id": "CQ2-O3", "paradigm": "A", "entity_id": "entity_05", "action_value": 5, "repetition": 0, "y": 0},
+        {"experiment_id": "CQ2-O4", "paradigm": "A", "entity_id": "entity_04", "action_value": 5, "repetition": 0, "y": 0},
+        {"experiment_id": "CQ2-O5", "paradigm": "A", "entity_id": "entity_06", "action_value": 5, "repetition": 0, "y": 0}
+      ],
+      "trusted_expected_revealing_intervention": {"entity_id": "entity_05", "action_value": 6},
+      "trusted_synthetic_outcome": 7
+    },
+    {
+      "cycle_id": "CQ-3",
+      "candidate_partition": {
+        "schema_version": "1.0",
+        "hypothesis_id": "H-CQ3",
+        "group_count": 4,
+        "entity_group": {
+          "entity_00": 0, "entity_01": 0, "entity_02": 0, "entity_03": 0,
+          "entity_04": 1, "entity_05": 1, "entity_06": 1, "entity_07": 1,
+          "entity_08": 2, "entity_09": 2, "entity_10": 2, "entity_11": 2,
+          "entity_12": 3, "entity_13": 3, "entity_14": 3, "entity_15": 3
+        }
+      },
+      "visible_A_observations": [
+        {"experiment_id": "CQ3-O0", "paradigm": "A", "entity_id": "entity_08", "action_value": 1, "repetition": 0, "y": 7},
+        {"experiment_id": "CQ3-O1", "paradigm": "A", "entity_id": "entity_09", "action_value": 1, "repetition": 0, "y": 7},
+        {"experiment_id": "CQ3-O2", "paradigm": "A", "entity_id": "entity_11", "action_value": 1, "repetition": 0, "y": 7},
+        {"experiment_id": "CQ3-O3", "paradigm": "A", "entity_id": "entity_10", "action_value": 0, "repetition": 0, "y": 5},
+        {"experiment_id": "CQ3-O4", "paradigm": "A", "entity_id": "entity_08", "action_value": 0, "repetition": 0, "y": 5},
+        {"experiment_id": "CQ3-O5", "paradigm": "A", "entity_id": "entity_09", "action_value": 0, "repetition": 0, "y": 5}
+      ],
+      "trusted_expected_revealing_intervention": {"entity_id": "entity_10", "action_value": 1},
+      "trusted_synthetic_outcome": 0
+    }
+  ]
+}
