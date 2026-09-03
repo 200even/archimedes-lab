@@ -12,6 +12,7 @@ from archimedes_v0.v1_protocol import (
     B_TRANSFER_BUDGET,
     CanonicalPartition,
     PartitionHypothesis,
+    ScheduleSlot,
     build_b_calibration_schedule,
     build_b_lookup,
     build_b_transfer_schedule,
@@ -134,29 +135,26 @@ def test_mapping_insertion_order_does_not_change_schedule():
 
 
 def test_inconsistent_b_cell_forces_failure_even_with_two_to_one_majority():
-    partition = canonicalize_partition(_partition_from_sizes((8, 8)))
-    calibration = list(build_b_calibration_schedule(partition))
-    # Pick a cell with >=3 calibration observations and force [3,3,5].
-    by_cell = {}
-    for i, row in enumerate(calibration):
-        by_cell.setdefault((row.canonical_group, row.action_value), []).append(i)
-    target_cell, indices = next((cell, idxs) for cell, idxs in by_cell.items() if len(idxs) >= 3)
-    outcomes = [0] * len(calibration)
-    outcomes[indices[0]] = 3
-    outcomes[indices[1]] = 3
-    outcomes[indices[2]] = 5
-    lookup = build_b_lookup(calibration, outcomes, group_count=partition.group_count)
+    # The production 32-slot schedule never places three calibration observations
+    # in one cell, but the lookup primitive itself is frozen against any future
+    # accidental majority-vote rescue. This independent synthetic fixture verifies
+    # that [3,3,5] is still inconsistent.
+    calibration = (
+        ScheduleSlot(0, "entity_00", 0, 0),
+        ScheduleSlot(1, "entity_01", 0, 0),
+        ScheduleSlot(2, "entity_02", 0, 0),
+    )
+    lookup = build_b_lookup(calibration, (3, 3, 5), group_count=2)
+    target_cell = (0, 0)
     assert lookup[target_cell].status == "inconsistent"
     assert lookup[target_cell].predicted_y is None
 
-    transfer = build_b_transfer_schedule(partition, calibration)
+    transfer = (ScheduleSlot(0, "entity_03", 0, 0),)
     predictions = build_transfer_predictions(transfer, lookup)
-    affected = [p for p in predictions if (p.canonical_group, p.action_value) == target_cell]
-    assert affected
-    assert all(p.forced_failure and p.predicted_y is None for p in affected)
-    synthetic_outcomes = [p.predicted_y if p.predicted_y is not None else 0 for p in predictions]
-    correct, total, _ = score_transfer(predictions, synthetic_outcomes)
-    assert correct <= total - len(affected)
+    assert predictions[0].forced_failure
+    assert predictions[0].predicted_y is None
+    correct, total, accuracy = score_transfer(predictions, (3,))
+    assert (correct, total, accuracy) == (0, 1, 0.0)
 
 
 @pytest.mark.parametrize(
