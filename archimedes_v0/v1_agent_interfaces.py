@@ -39,24 +39,87 @@ def _authorized_agent_schemas() -> dict[str, Any]:
     return raw["agent_facing"]
 
 
-def _rewrite_refs(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {key: _rewrite_refs(item) for key, item in value.items()}
+def _enum_type(values: list[Any]) -> str | None:
+    if values and all(isinstance(value, str) for value in values):
+        return "string"
+    if values and all(type(value) is int for value in values):
+        return "integer"
+    return None
+
+
+def _project_provider_schema(value: Any, *, schemas: dict[str, Any], stack: tuple[str, ...] = ()) -> Any:
+    """Project the normative freeze to Gemini's documented JSON-Schema subset.
+
+    Scientific/semantic validation remains the exact V1 freeze plus trusted
+    Pydantic/Broker checks. This projection changes only which constraints are
+    redundantly enforced by the provider's structured-output decoder:
+
+    * internal refs are deterministically inlined;
+    * `const` becomes equivalent one-value `enum`;
+    * `oneOf` becomes `anyOf` (the V1 branches are type-disjoint);
+    * provider-undocumented `pattern` and `uniqueItems` are omitted and retained
+      exclusively as trusted post-response validation.
+
+    No model output bypasses the trusted validators, so projection cannot widen
+    the accepted scientific hypothesis class.
+    """
     if isinstance(value, list):
-        return [_rewrite_refs(item) for item in value]
-    if isinstance(value, str) and value.startswith("#/agent_facing/"):
-        return "#/$defs/" + value.split("/")[-1]
-    return value
+        return [_project_provider_schema(item, schemas=schemas, stack=stack) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    if "$ref" in value:
+        ref = value["$ref"]
+        prefix = "#/agent_facing/"
+        if not isinstance(ref, str) or not ref.startswith(prefix):
+            raise V1AgentInterfaceError(f"unsupported frozen-schema reference {ref!r}")
+        name = ref[len(prefix) :]
+        if name not in schemas or name in stack:
+            raise V1AgentInterfaceError(f"invalid/cyclic frozen-schema reference {ref!r}")
+        return _project_provider_schema(schemas[name], schemas=schemas, stack=stack + (name,))
+
+    output: dict[str, Any] = {}
+    if "const" in value:
+        const_value = value["const"]
+        output["enum"] = [const_value]
+        inferred = _enum_type([const_value])
+        if inferred is not None:
+            output["type"] = inferred
+
+    if "oneOf" in value:
+        output["anyOf"] = _project_provider_schema(value["oneOf"], schemas=schemas, stack=stack)
+
+    for key, item in value.items():
+        if key in {"$ref", "const", "oneOf", "pattern", "uniqueItems"} or key.startswith("x-"):
+            continue
+        if key == "type" and item == "null":
+            # Gemini's structured-output documentation describes nullable types
+            # by including "null" in the type array.
+            output[key] = ["null"]
+            continue
+        if key in {"properties"}:
+            output[key] = {
+                name: _project_provider_schema(schema, schemas=schemas, stack=stack)
+                for name, schema in item.items()
+            }
+            continue
+        if key in {"items", "anyOf"}:
+            output[key] = _project_provider_schema(item, schemas=schemas, stack=stack)
+            continue
+        output[key] = item
+
+    if "enum" in output and "type" not in output:
+        inferred = _enum_type(output["enum"])
+        if inferred is not None:
+            output["type"] = inferred
+    return output
 
 
 def authorized_response_schema(schema_name: str) -> dict[str, Any]:
     schemas = _authorized_agent_schemas()
     if schema_name not in schemas:
         raise V1AgentInterfaceError(f"unknown frozen V1 schema {schema_name}")
-    # Provider-facing schema is the exact authorized schema, with references moved
-    # under standard JSON-Schema $defs without changing constraints.
-    defs = {name: _rewrite_refs(schema) for name, schema in schemas.items()}
-    return {"$ref": f"#/$defs/{schema_name}", "$defs": defs}
+    return _project_provider_schema(schemas[schema_name], schemas=schemas, stack=(schema_name,))
 
 
 def _invoke_raw(
@@ -124,10 +187,10 @@ class V1Conjecturer:
     def commit(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Return raw structured commit JSON so the Broker charges before validation.
 
-        The provider still receives the exact frozen ACommitDecision schema. The
-        trusted Broker, not this role adapter, performs semantic validation after
-        inspecting the top-level decision and charging the four-unit A gate for a
-        stated commit. This preserves the preregistered resource firewall.
+        The provider receives the deterministic Gemini-compatible projection of
+        the frozen ACommitDecision schema. The trusted Broker performs the exact
+        normative validation after inspecting the top-level decision and charging
+        the four-unit A gate for a stated commit.
         """
         return _invoke_raw(
             self._backend,
