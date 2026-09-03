@@ -39,7 +39,10 @@ class QualificationBackend:
 
         cursor = 0
         while len(experiments) < 10:
-            pair = (f"entity_{12 + (cursor % 4):02d}", cursor % 8)
+            # Enumerate a genuinely expanding 4x8 grid. The earlier correlated
+            # modulo pair repeated after eight values and made this synthetic
+            # fixture loop forever; that was a test-harness bug, not model logic.
+            pair = (f"entity_{12 + ((cursor // 8) % 4):02d}", cursor % 8)
             cursor += 1
             if pair in used_pairs or pair == TARGETS[cycle]:
                 continue

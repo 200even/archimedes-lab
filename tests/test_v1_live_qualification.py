@@ -60,7 +60,7 @@ class AuditedFakeBackend:
         cursor = 0
         required = 9 if cycle in self.invalid_cycles else 10
         while len(rows) < required:
-            pair = (f"entity_{12 + cursor % 4:02d}", cursor % 8)
+            pair = (f"entity_{12 + ((cursor // 8) % 4):02d}", cursor % 8)
             cursor += 1
             if pair in used or pair == TARGETS[cycle]:
                 continue
