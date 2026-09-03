@@ -1,0 +1,42 @@
+{
+  "status": "FROZEN_PRE_EXPOSURE_NOT_AUTHORIZED_FOR_BENCHMARK",
+  "prompt_set": "Archimedes-V1-A-only",
+  "prompts": {
+    "conjecturer": {
+      "path": "v1_design/prompts/conjecturer_system.txt",
+      "sha256": "2b530b7f5328ae7080299adc00f90b4380cede58f2971400ba9eb5033b04fa4e",
+      "utf8_bytes": 828,
+      "max_output_tokens": 4096,
+      "maximum_calls_per_completed_A_phase": 7
+    },
+    "critic": {
+      "path": "v1_design/prompts/critic_system.txt",
+      "sha256": "545bd8213e567f1977ec4e15b6e2e5315056b5c0ccab6b01a60dc272b38b88c8",
+      "utf8_bytes": 752,
+      "max_output_tokens": 2048,
+      "maximum_calls_per_completed_A_phase": 6
+    },
+    "flat": {
+      "path": "v1_design/prompts/flat_system.txt",
+      "sha256": "b0bb11e6ff492fdacc4edc1d7fa852b595c1c6c9039872dd09e7dc77082ca412",
+      "utf8_bytes": 916,
+      "generate_max_output_tokens": 4096,
+      "select_max_output_tokens": 2048,
+      "commit_max_output_tokens": 4096,
+      "maximum_calls_per_completed_A_phase": 13
+    }
+  },
+  "compute_envelope": {
+    "full_calls": 13,
+    "flat_calls": 13,
+    "full_max_output_tokens": 40960,
+    "flat_max_output_tokens": 40960,
+    "B_side_model_calls": 0
+  },
+  "role_isolation": {
+    "fresh_provider_request_per_call": true,
+    "raw_reasoning_cross_role": false,
+    "persistent_interactions": false,
+    "external_tools": false
+  }
+}
