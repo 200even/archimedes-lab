@@ -57,9 +57,9 @@ def test_B_pair_schedule_is_identical_under_radically_different_outcomes():
     transfer_digest = canonical_digest(build_b_transfer_schedule(partition, calibration))
     outcome_sets = (
         [0] * 32,
-        [i % 8 for i in range(32)],
-        [7 - (i % 8) for i in range(32)],
-        [(i * 5 + 3) % 8 for i in range(32)],
+        [0] * 16 + [1] * 16,  # every two-representative cell is contradictory
+        [i % 8 for i in range(16)] + [((i + 3) % 8) for i in range(16)],
+        [(i * 5 + 3) % 8 for i in range(16)] + [((i * 5 + 4) % 8) for i in range(16)],
     )
     lookup_statuses = []
     for outcomes in outcome_sets:
