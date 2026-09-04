@@ -1,0 +1,51 @@
+{
+  "status": "FROZEN_FOR_AUTHORIZED_REPLACEMENT_THREE_CALL_CRITIC_SAFEGUARD",
+  "authorized_live_critic_calls": 3,
+  "benchmark_exposure_authorized": false,
+  "replacement_of_aborted_run_id": 33781365337,
+  "frozen_code_commit_sha": "4c01910af4b298b0e29a54c5a6a70ac4d83f6f21",
+  "frozen_backend_sha256": "4762782463d0e6923f4fb1f8a9aee0704cdd2d3fc89243695915f73a4cfee59c",
+  "frozen_backend_git_blob_sha": "559f7e194e11df94367a6e89deb189c9128caff6",
+  "pre_call_v1_determinism": {
+    "run_id": 33873723294,
+    "head_sha": "4c01910af4b298b0e29a54c5a6a70ac4d83f6f21",
+    "conclusion": "success",
+    "workflow": "V1 Determinism",
+    "run_number": 27,
+    "hash_seed_jobs": [0, 1, 42, 314159],
+    "cross_seed_compare": "success"
+  },
+  "pre_call_general_ci": {
+    "run_id": 33873723276,
+    "head_sha": "4c01910af4b298b0e29a54c5a6a70ac4d83f6f21",
+    "conclusion": "success"
+  },
+  "prior_aborted_infrastructure_event": {
+    "run_id": 33781365337,
+    "terminal_class": "ABORTED_PROVIDER_INFRASTRUCTURE",
+    "provider_transactions_sent": 1,
+    "scientifically_scored_cycles": 0,
+    "later_cycles_sent": 0,
+    "artifact_id": 9903749244,
+    "artifact_sha256": "bdd97cdc9ae339aa5d3ee2278c12308d6e62f5f3bc60b1ee1e403a3cb7f7dd28",
+    "cause": "otherwise completed stateless provider response omitted interaction id before trusted usage/scoring ledger"
+  },
+  "provider_contract": {
+    "model": "gemini-3.7-flash",
+    "api_revision": "2026-05-20",
+    "seed": 20260902,
+    "thinking_level": "high",
+    "thinking_summaries": "none",
+    "timeout_seconds": 300.0,
+    "automatic_retries": 0,
+    "store": false,
+    "interaction_id_nullable_only_when_store_false": true
+  },
+  "fixture_set": "V1-Critic-Safeguard-1",
+  "fixture_git_blob_sha": "277838ecf024b19a56277652e5564898538002bd",
+  "authorization_source": "REFEREE_DECISION_V1_PROVIDER_ID_REPLACEMENT.md",
+  "adapter_amendment": "V1_PROVIDER_ADAPTER_REPLACEMENT_AMENDMENT.md",
+  "replacement_workflow": ".github/workflows/v1_critic_qualification_replacement.yml",
+  "replacement_runner": "scripts/run_v1_critic_qualification_replacement.py",
+  "notes": "Frozen after the authorized narrow provider-record patch passed general CI and four-hash-seed V1 determinism. The prior infrastructure abort remains unrecovered and separately recorded. This freeze authorizes only one fresh replacement execution of unchanged CQ-1/CQ-2/CQ-3 and never authorizes causal or Null benchmark exposure."
+}
