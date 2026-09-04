@@ -44,10 +44,7 @@ def _response(structured=None, **overrides):
         "model": GEMINI_MODEL_ID,
         "status": "completed",
         "steps": [
-            {
-                "type": "thought",
-                "signature": "opaque-signature",
-            },
+            {"type": "thought", "signature": "opaque-signature"},
             {
                 "type": "model_output",
                 "content": [{"type": "text", "text": json.dumps(structured, sort_keys=True)}],
@@ -133,6 +130,36 @@ def test_usage_record_logs_provider_compute_without_reasoning_content():
     assert len(record.request_sha256) == 64
     assert len(record.response_text_sha256) == 64
     assert not hasattr(record, "thought_text")
+
+
+def test_missing_interaction_id_is_allowed_only_for_frozen_stateless_request_and_usage_is_recorded():
+    sink = InMemoryUsageSink()
+    response = _response()
+    del response["id"]
+    result = _invoke(FakeTransport(response), sink=sink)
+    assert result == {"candidates": []}
+    assert len(sink.records) == 1
+    record = sink.records[0]
+    assert record.interaction_id is None
+    assert record.returned_model == GEMINI_MODEL_ID
+    assert record.status == "completed"
+    assert len(record.request_sha256) == 64
+    assert len(record.response_text_sha256) == 64
+    assert record.total_tokens == 228
+
+
+def test_explicit_null_interaction_id_is_allowed_for_stateless_request():
+    sink = InMemoryUsageSink()
+    result = _invoke(FakeTransport(_response(id=None)), sink=sink)
+    assert result == {"candidates": []}
+    assert sink.records[0].interaction_id is None
+
+
+def test_non_null_malformed_interaction_id_remains_fatal():
+    transport = FakeTransport(_response(id=17))
+    with pytest.raises(V1ProviderError, match="invalid interaction id"):
+        _invoke(transport)
+    assert len(transport.calls) == 1
 
 
 def test_http_failure_is_single_attempt_and_never_retried():
