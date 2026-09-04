@@ -114,7 +114,28 @@ def test_live_workflow_is_one_shot_trigger_only_and_rerun_guarded():
     assert "fetch-depth: 0" in text
 
 
+def test_replacement_workflow_is_distinct_one_shot_and_records_prior_abort():
+    text = Path(".github/workflows/v1_critic_qualification_replacement.yml").read_text(encoding="utf-8")
+    assert "workflow_dispatch" not in text
+    assert "V1_CRITIC_REPLACEMENT_TRIGGER.txt" in text
+    assert "V1_CRITIC_QUALIFICATION_TRIGGER.txt" not in text
+    assert "github.run_attempt == 1" in text
+    assert "git log --format=%H -- V1_CRITIC_REPLACEMENT_TRIGGER.txt" in text
+    assert "33781365337" in text
+    assert "benchmark_exposure_authorized" in text
+    assert "GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}" in text
+    assert "actions/upload-artifact@v4" in text
+
+
 def test_live_runner_has_no_benchmark_generator_import_path():
     text = Path("scripts/run_v1_critic_qualification_live.py").read_text(encoding="utf-8")
     forbidden_imports = ("archimedes_v0.generator", "archimedes_v0.world", "from archimedes_v0 import generator")
     assert all(token not in text for token in forbidden_imports)
+
+
+def test_replacement_runner_has_no_benchmark_generator_import_path():
+    text = Path("scripts/run_v1_critic_qualification_replacement.py").read_text(encoding="utf-8")
+    forbidden_imports = ("archimedes_v0.generator", "archimedes_v0.world", "from archimedes_v0 import generator")
+    assert all(token not in text for token in forbidden_imports)
+    assert "PRIOR_ABORT_RUN_ID = 33781365337" in text
+    assert "V1_CRITIC_REPLACEMENT_EXECUTION_FREEZE.json" in text
