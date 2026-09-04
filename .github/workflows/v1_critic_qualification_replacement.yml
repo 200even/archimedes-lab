@@ -1,0 +1,77 @@
+name: V1 Critic Replacement Qualification
+
+on:
+  push:
+    paths:
+      - 'V1_CRITIC_REPLACEMENT_TRIGGER.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v1-critic-replacement-qualification
+  cancel-in-progress: false
+
+jobs:
+  safeguard:
+    if: github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.14'
+      - name: Validate replacement trigger and frozen authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat V1_CRITIC_REPLACEMENT_TRIGGER.txt)" = "ARCHIMEDES_V1_CRITIC_REPLACEMENT_ONCE"
+          count="$(git log --format=%H -- V1_CRITIC_REPLACEMENT_TRIGGER.txt | wc -l | tr -d ' ')"
+          test "$count" = "1"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('V1_CRITIC_REPLACEMENT_EXECUTION_FREEZE.json')
+          if not p.is_file():
+              raise SystemExit('missing frozen replacement-execution manifest')
+          d = json.loads(p.read_text())
+          assert d['status'] == 'FROZEN_FOR_AUTHORIZED_REPLACEMENT_THREE_CALL_CRITIC_SAFEGUARD'
+          assert d['authorized_live_critic_calls'] == 3
+          assert d['benchmark_exposure_authorized'] is False
+          assert d['replacement_of_aborted_run_id'] == 33781365337
+          assert d['pre_call_v1_determinism']['conclusion'] == 'success'
+          PY
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e .
+      - name: Execute exactly three authorized replacement Critic slots
+        id: qualification
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set +e
+          python scripts/run_v1_critic_qualification_replacement.py --out-dir replacement-evidence
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
+      - name: Upload immutable replacement qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v1-critic-replacement-qualification-evidence
+          path: replacement-evidence/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Propagate infrastructure abort after evidence upload
+        if: always()
+        shell: bash
+        run: |
+          code="${{ steps.qualification.outputs.exit_code }}"
+          if [ -z "$code" ]; then
+            echo "replacement qualification step did not report an exit code" >&2
+            exit 1
+          fi
+          exit "$code"
