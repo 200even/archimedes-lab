@@ -1,0 +1,300 @@
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.metadata
+import json
+import os
+import platform
+import subprocess
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
+
+from archimedes_v0.v1_agent_interfaces import V1Critic
+from archimedes_v0.v1_critic_qualification import FIXTURE_PATH
+from archimedes_v0.v1_gemini_backend import (
+    GEMINI_API_REVISION,
+    GEMINI_INTERACTIONS_ENDPOINT,
+    GEMINI_MODEL_ID,
+    GEMINI_SEED,
+    GEMINI_THINKING_LEVEL,
+    GEMINI_THINKING_SUMMARIES,
+    GEMINI_TIMEOUT_SECONDS,
+    GeminiInteractionsBackend,
+    InMemoryUsageSink,
+)
+from archimedes_v0.v1_live_qualification import execute_authorized_critic_safeguard, usage_for_cycle
+
+ROOT = Path(__file__).resolve().parents[1]
+FREEZE_PATH = ROOT / "V1_CRITIC_REPLACEMENT_EXECUTION_FREEZE.json"
+PROMPT_MANIFEST_PATH = ROOT / "V1_PROMPT_MANIFEST.json"
+SCHEDULE_MANIFEST_PATH = ROOT / "V1_SCHEDULE_DIGEST_MANIFEST.json"
+PRIOR_ABORT_RUN_ID = 33781365337
+
+HASH_PATHS = (
+    "archimedes_v0/v1_protocol.py",
+    "archimedes_v0/v1_broker.py",
+    "archimedes_v0/v1_orchestrator.py",
+    "archimedes_v0/v1_agent_interfaces.py",
+    "archimedes_v0/v1_gemini_backend.py",
+    "archimedes_v0/v1_critic_qualification.py",
+    "archimedes_v0/v1_live_qualification.py",
+    "scripts/run_v1_critic_qualification_replacement.py",
+    ".github/workflows/v1_critic_qualification_replacement.yml",
+    ".github/workflows/v1_determinism.yml",
+    "V1_CRITIC_QUALIFICATION_FIXTURES.json",
+    "V1_CRITIC_QUALIFICATION_PACKAGE_SPEC.md",
+    "V1_SCHEMA_FREEZE.json",
+    "V1_PROMPT_MANIFEST.json",
+    "V1_PROVIDER_ADAPTER_FREEZE_DRAFT.md",
+    "V1_PROVIDER_ADAPTER_REPLACEMENT_AMENDMENT.md",
+    "REFEREE_DECISION_V1_PROVIDER_ADAPTER_ACCEPTED.md",
+    "REFEREE_DECISION_V1_PROVIDER_ID_REPLACEMENT.md",
+    "V1_CRITIC_REPLACEMENT_EXECUTION_FREEZE.json",
+    "V1_SCHEDULE_DIGEST_MANIFEST.json",
+    "v1_design/prompts/conjecturer_system.txt",
+    "v1_design/prompts/critic_system.txt",
+    "v1_design/prompts/flat_system.txt",
+)
+
+
+def _canonical_bytes(value: Any) -> bytes:
+    return (json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode("utf-8")
+
+
+def _write_json(path: Path, value: Any) -> str:
+    data = _canonical_bytes(value)
+    path.write_bytes(data)
+    return hashlib.sha256(data).hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _git(*args: str) -> str:
+    return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
+
+
+def _blob_sha(relative: str) -> str:
+    return _git("hash-object", relative)
+
+
+def _file_manifest() -> dict[str, Any]:
+    rows: dict[str, Any] = {}
+    paths = list(HASH_PATHS) + sorted(str(p.relative_to(ROOT)) for p in (ROOT / "tests").glob("test_v1_*.py"))
+    for relative in paths:
+        path = ROOT / relative
+        if not path.is_file():
+            raise RuntimeError(f"required replacement-freeze path missing: {relative}")
+        rows[relative] = {
+            "sha256": _sha256_file(path),
+            "git_blob_sha": _blob_sha(relative),
+            "bytes": path.stat().st_size,
+        }
+    return rows
+
+
+def _load_frozen_execution() -> dict[str, Any]:
+    raw = json.loads(FREEZE_PATH.read_text(encoding="utf-8"))
+    if raw.get("status") != "FROZEN_FOR_AUTHORIZED_REPLACEMENT_THREE_CALL_CRITIC_SAFEGUARD":
+        raise RuntimeError("replacement Critic execution freeze is absent or not frozen")
+    if raw.get("authorized_live_critic_calls") != 3:
+        raise RuntimeError("replacement freeze must authorize exactly three calls")
+    if raw.get("benchmark_exposure_authorized") is not False:
+        raise RuntimeError("replacement freeze must explicitly prohibit benchmark exposure")
+    if raw.get("replacement_of_aborted_run_id") != PRIOR_ABORT_RUN_ID:
+        raise RuntimeError("replacement freeze must record the authorized prior infrastructure abort")
+    ci = raw.get("pre_call_v1_determinism")
+    if not isinstance(ci, dict) or ci.get("conclusion") != "success" or not isinstance(ci.get("run_id"), int):
+        raise RuntimeError("replacement freeze must identify a successful post-patch V1 determinism run")
+    return raw
+
+
+def _critic_prompt() -> str:
+    manifest = json.loads(PROMPT_MANIFEST_PATH.read_text(encoding="utf-8"))
+    row = manifest["prompts"]["critic"]
+    path = ROOT / row["path"]
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != row["sha256"]:
+        raise RuntimeError("Critic prompt hash does not match frozen prompt manifest")
+    return raw.decode("utf-8")
+
+
+def _result_document(execution, records, execution_commit: str) -> dict[str, Any]:
+    rows = []
+    for cycle in execution.cycles:
+        record = usage_for_cycle(cycle, records)
+        rows.append(
+            {
+                "cycle_index": cycle.cycle_index,
+                "cycle_id": cycle.cycle_id,
+                "target_entity_id": cycle.target_entity_id,
+                "target_action_value": cycle.target_action_value,
+                "selected_batch": cycle.selected_batch,
+                "selected_revealing_intervention": cycle.selected_revealing_intervention,
+                "interaction_id": record.interaction_id if record else None,
+                "returned_model": record.returned_model if record else None,
+                "provider_status": record.status if record else None,
+                "request_sha256": record.request_sha256 if record else None,
+                "response_text_sha256": record.response_text_sha256 if record else None,
+                "usage": {
+                    "total_input_tokens": record.total_input_tokens if record else None,
+                    "total_output_tokens": record.total_output_tokens if record else None,
+                    "total_thought_tokens": record.total_thought_tokens if record else None,
+                    "total_tool_use_tokens": record.total_tool_use_tokens if record else None,
+                    "total_tokens": record.total_tokens if record else None,
+                },
+                "semantic_validation_error": cycle.semantic_validation_error,
+            }
+        )
+    return {
+        "package_version": "v1-critic-replacement-qualification-1",
+        "status": "LIVE_REPLACEMENT_RESULT",
+        "terminal_execution_class": execution.terminal_execution_class,
+        "execution_commit_sha": execution_commit,
+        "fixture_set": execution.fixture_set,
+        "fixture_file_sha256": _sha256_file(FIXTURE_PATH),
+        "replacement_of_aborted_run_id": PRIOR_ABORT_RUN_ID,
+        "cycles": rows,
+        "consecutive_misses": execution.consecutive_misses,
+        "passes_safeguard": execution.passes_safeguard,
+        "provider_failure": execution.provider_failure,
+        "benchmark_exposure_occurred": False,
+        "notes": "Authorized replacement qualification after unrecovered provider-ID infrastructure abort. No automatic retries were performed.",
+    }
+
+
+def _usage_document(records) -> list[dict[str, Any]]:
+    return [asdict(record) for record in records]
+
+
+def _usage_totals(records) -> dict[str, int | None]:
+    keys = (
+        "total_input_tokens",
+        "total_output_tokens",
+        "total_thought_tokens",
+        "total_tool_use_tokens",
+        "total_tokens",
+    )
+    out: dict[str, int | None] = {}
+    for key in keys:
+        values = [getattr(record, key) for record in records]
+        out[key] = sum(value for value in values if value is not None) if any(value is not None for value in values) else None
+    return out
+
+
+def _checkpoint(execution, records, execution_commit: str, result_sha: str, usage_sha: str, freeze: dict[str, Any]) -> str:
+    cycle_lines = []
+    for cycle in execution.cycles:
+        if cycle.selected_revealing_intervention is True:
+            outcome = "HIT"
+        elif cycle.selected_revealing_intervention is False:
+            outcome = "MISS"
+        else:
+            outcome = "NOT RUN"
+        cycle_lines.append(
+            f"- Cycle {cycle.cycle_index} `{cycle.cycle_id}`: target `({cycle.target_entity_id}, {cycle.target_action_value})` — **{outcome}**"
+        )
+    request = (
+        "AUTHORIZE V1 BENCHMARK EXPOSURE"
+        if execution.terminal_execution_class == "COMPLETED_PASS"
+        else "HOLD — REVISE/INVESTIGATE"
+        if execution.terminal_execution_class == "ABORTED_PROVIDER_INFRASTRUCTURE"
+        else "TERMINATE V1"
+    )
+    totals = _usage_totals(records)
+    ci = freeze["pre_call_v1_determinism"]
+    return f"""# Archimedes V1 — Replacement Critic Final Pre-Exposure Checkpoint\n\n**Critic safeguard:** `{execution.terminal_execution_class}`\n\n**Execution commit:** `{execution_commit}`\n\n**Replacement of unrecovered infrastructure run:** `{PRIOR_ABORT_RUN_ID}`\n\n## Three unchanged preregistered cycles\n\n{chr(10).join(cycle_lines)}\n\nConsecutive misses at termination: `{execution.consecutive_misses}`. Safeguard pass: `{execution.passes_safeguard}`.\n\n## Provider and compute record\n\n- Requested model contract: `{GEMINI_MODEL_ID}`\n- API revision: `{GEMINI_API_REVISION}`\n- Seed: `{GEMINI_SEED}`\n- Thinking level: `{GEMINI_THINKING_LEVEL}`\n- Thought summaries: `{GEMINI_THINKING_SUMMARIES}`\n- Timeout: `{GEMINI_TIMEOUT_SECONDS}` seconds\n- Automatic retries: `0`\n- Completed provider interactions recorded: `{len(records)}`\n- Null interaction IDs recorded: `{sum(record.interaction_id is None for record in records)}`\n- Total input tokens: `{totals['total_input_tokens']}`\n- Total output tokens: `{totals['total_output_tokens']}`\n- Total thought tokens: `{totals['total_thought_tokens']}`\n- Total tokens: `{totals['total_tokens']}`\n\n## Integrity evidence\n\n- Post-patch V1 Determinism run: `{ci['run_id']}` — `{ci['conclusion']}`\n- Frozen code commit: `{freeze['frozen_code_commit_sha']}`\n- Frozen B-schedule combined digest: `{json.loads(SCHEDULE_MANIFEST_PATH.read_text(encoding='utf-8'))['combined_sha256']}`\n- `V1_CRITIC_REPLACEMENT_QUALIFICATION_RESULT.json` SHA-256: `{result_sha}`\n- `V1_CRITIC_REPLACEMENT_QUALIFICATION_USAGE.json` SHA-256: `{usage_sha}`\n\nThe prior abort remains in the permanent ledger and was not rescored. No causal or Null benchmark world was exposed during this replacement qualification. A Critic safeguard pass does **not** itself authorize benchmark exposure.\n\n## Requested referee ruling\n\n**`{request}`**\n"""
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--out-dir", default="replacement-evidence")
+    args = parser.parse_args()
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    execution_commit = os.environ.get("GITHUB_SHA") or _git("rev-parse", "HEAD")
+    freeze = _load_frozen_execution()
+    usage_sink = InMemoryUsageSink()
+
+    if not os.environ.get("GEMINI_API_KEY"):
+        from archimedes_v0.v1_live_qualification import LiveCriticExecution, _pending_cycle
+        from archimedes_v0.v1_critic_qualification import load_fixtures
+
+        fixtures = load_fixtures()
+        execution = LiveCriticExecution(
+            fixture_set=fixtures["fixture_set"],
+            cycles=tuple(_pending_cycle(cycle, i) for i, cycle in enumerate(fixtures["cycles"])),
+            consecutive_misses=None,
+            passes_safeguard=None,
+            terminal_execution_class="ABORTED_PROVIDER_INFRASTRUCTURE",
+            provider_failure="GEMINI_API_KEY missing; zero replacement provider requests sent",
+        )
+    else:
+        backend = GeminiInteractionsBackend(usage_sink=usage_sink)
+        critic = V1Critic(backend, _critic_prompt())
+        execution = execute_authorized_critic_safeguard(critic, usage_sink)
+
+    result = _result_document(execution, usage_sink.records, execution_commit)
+    usage = _usage_document(usage_sink.records)
+    result_path = out_dir / "V1_CRITIC_REPLACEMENT_QUALIFICATION_RESULT.json"
+    usage_path = out_dir / "V1_CRITIC_REPLACEMENT_QUALIFICATION_USAGE.json"
+    result_sha = _write_json(result_path, result)
+    usage_sha = _write_json(usage_path, usage)
+
+    file_manifest = _file_manifest()
+    returned_models = sorted({record.returned_model for record in usage_sink.records})
+    schedule_manifest = json.loads(SCHEDULE_MANIFEST_PATH.read_text(encoding="utf-8"))
+    final_manifest = {
+        "manifest_version": "v1-final-preexposure-replacement-1",
+        "status": "GENERATED_AFTER_AUTHORIZED_REPLACEMENT_CRITIC_SAFEGUARD",
+        "execution_commit_sha": execution_commit,
+        "terminal_execution_class": execution.terminal_execution_class,
+        "replacement_of_aborted_run_id": PRIOR_ABORT_RUN_ID,
+        "prior_aborted_infrastructure_event": freeze["prior_aborted_infrastructure_event"],
+        "source_and_config_files": file_manifest,
+        "runtime": {
+            "python": platform.python_version(),
+            "pydantic": importlib.metadata.version("pydantic"),
+            "z3_solver": importlib.metadata.version("z3-solver"),
+        },
+        "provider": {
+            "endpoint": GEMINI_INTERACTIONS_ENDPOINT,
+            "api_revision": GEMINI_API_REVISION,
+            "requested_model": GEMINI_MODEL_ID,
+            "returned_models": returned_models,
+            "seed": GEMINI_SEED,
+            "thinking_level": GEMINI_THINKING_LEVEL,
+            "thinking_summaries": GEMINI_THINKING_SUMMARIES,
+            "timeout_seconds": GEMINI_TIMEOUT_SECONDS,
+            "automatic_retry_count": 0,
+            "store": False,
+            "stream": False,
+            "background": False,
+            "tools_enabled": False,
+            "interaction_id_nullable_only_when_store_false": True,
+        },
+        "pre_call_v1_determinism": freeze["pre_call_v1_determinism"],
+        "frozen_code_commit_sha": freeze["frozen_code_commit_sha"],
+        "frozen_backend_sha256": freeze["frozen_backend_sha256"],
+        "schedule_combined_sha256": schedule_manifest["combined_sha256"],
+        "result_sha256": result_sha,
+        "usage_sha256": usage_sha,
+        "completed_provider_calls_recorded": len(usage_sink.records),
+        "null_interaction_id_records": sum(record.interaction_id is None for record in usage_sink.records),
+        "benchmark_exposure_occurred": False,
+    }
+    _write_json(out_dir / "V1_FINAL_PREEXPOSURE_REPLACEMENT_MANIFEST.json", final_manifest)
+    checkpoint = _checkpoint(execution, usage_sink.records, execution_commit, result_sha, usage_sha, freeze)
+    (out_dir / "REFEREE_CHECKPOINT_V1_REPLACEMENT_FINAL_PREEXPOSURE.md").write_text(
+        checkpoint, encoding="utf-8", newline="\n"
+    )
+
+    return 2 if execution.terminal_execution_class == "ABORTED_PROVIDER_INFRASTRUCTURE" else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
