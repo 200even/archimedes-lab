@@ -29,7 +29,7 @@ class V1ProviderError(RuntimeError):
 
 @dataclass(frozen=True)
 class GeminiUsageRecord:
-    interaction_id: str
+    interaction_id: str | None
     returned_model: str
     status: str
     role: str
@@ -86,7 +86,6 @@ class UrllibHTTPTransport:
             with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
                 return int(response.status), response.read()
         except urllib.error.HTTPError as exc:
-            # Return the provider body for normalized handling, but never retry.
             return int(exc.code), exc.read()
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise V1ProviderError(f"Gemini transport failure: {type(exc).__name__}") from exc
@@ -111,12 +110,8 @@ def _extract_model_text(response: dict[str, Any]) -> str:
             raise V1ProviderError("Gemini response contained malformed step")
         step_type = step.get("type")
         if step_type == "thought":
-            # Thought summaries are disabled; signatures may still appear. They are
-            # never retained or passed between Archimedes roles.
             continue
         if step_type != "model_output":
-            # No tools are declared and tool_choice=none. Any function/tool/action
-            # step would violate the frozen V1 provider contract.
             raise V1ProviderError(f"unexpected Gemini step type: {step_type!r}")
         content = step.get("content")
         if not isinstance(content, list):
@@ -148,8 +143,10 @@ class GeminiInteractionsBackend:
       * high thinking, no thought summaries;
       * fixed seed and exact slot max-output cap;
       * static JSON-schema structured output;
-      * any infrastructure/protocol failure raises V1ProviderError and aborts the
-        scientific run rather than becoming a score or receiving a retry.
+      * missing/null interaction id permitted only for the frozen stateless
+        store=false request;
+      * any other infrastructure/protocol failure raises V1ProviderError and aborts
+        the scientific run rather than becoming a score or receiving a retry.
     """
 
     def __init__(
@@ -181,8 +178,6 @@ class GeminiInteractionsBackend:
         response_schema: dict[str, Any],
         max_output_tokens: int,
     ) -> dict[str, Any]:
-        # Canonicalize the machine-readable call payload so equivalent Python
-        # mapping insertion orders produce byte-identical provider input.
         input_text = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
         request_body = {
             "model": GEMINI_MODEL_ID,
@@ -212,7 +207,6 @@ class GeminiInteractionsBackend:
             "Api-Revision": GEMINI_API_REVISION,
         }
 
-        # Exactly one transport call. There is intentionally no retry loop here.
         status_code, raw_response = self._transport.post_json(
             url=self._endpoint,
             headers=headers,
@@ -244,9 +238,16 @@ class GeminiInteractionsBackend:
             raise V1ProviderError("Gemini structured output must be a JSON object")
 
         usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
-        interaction_id = response.get("id")
-        if not isinstance(interaction_id, str) or not interaction_id:
-            raise V1ProviderError("Gemini completed response omitted interaction id")
+        raw_interaction_id = response.get("id")
+        if raw_interaction_id is None:
+            if request_body["store"] is not False:
+                raise V1ProviderError("Gemini completed response omitted interaction id for a stored interaction")
+            interaction_id: str | None = None
+        elif isinstance(raw_interaction_id, str) and raw_interaction_id:
+            interaction_id = raw_interaction_id
+        else:
+            raise V1ProviderError("Gemini completed response contained invalid interaction id")
+
         record = GeminiUsageRecord(
             interaction_id=interaction_id,
             returned_model=response["model"],
