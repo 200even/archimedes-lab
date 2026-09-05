@@ -1,0 +1,57 @@
+{
+  "status": "FROZEN_FOR_AUTHORIZED_V11_THREE_CALL_CRITIC_SAFEGUARD",
+  "protocol_version": "V1.1",
+  "authorized_live_critic_calls": 3,
+  "benchmark_exposure_authorized": false,
+  "frozen_implementation_commit_sha": "3b2715c79a81b0cc2cd2526147579730f03f9269",
+  "pre_call_v11_determinism": {
+    "run_id": 33985392814,
+    "head_sha": "3b2715c79a81b0cc2cd2526147579730f03f9269",
+    "conclusion": "success",
+    "workflow": "V1 Determinism",
+    "hash_seeds": [0, 1, 42, 314159],
+    "byte_identical_compare": true
+  },
+  "source_blob_shas": {
+    ".github/workflows/v1_determinism.yml": "34035153d9f7a4af0bb5dd1b1ec5f56866e344d0",
+    ".github/workflows/v1_v11_critic_qualification.yml": "b7d400f8653b539000b26b395f629e0572c3f835",
+    "V1_CRITIC_QUALIFICATION_FIXTURES.json": "277838ecf024b19a56277652e5564898538002bd",
+    "V1_PROMPT_MANIFEST.json": "1e6b6a3ff19f1aff1e32e73fabd1994a256e2c00",
+    "V1_SCHEMA_FREEZE.json": "a7867d1850dc7239ae8d533d805167bb0fad67c6",
+    "archimedes_v0/v1_agent_interfaces.py": "c8f99b599aa65930de59a00aed2cefce443c603d",
+    "archimedes_v0/v1_critic_qualification.py": "691cfbff2764370e9ec26e8225e75cdfffc60a89",
+    "archimedes_v0/v1_gemini_backend.py": "559f7e194e11df94367a6e89deb189c9128caff6",
+    "archimedes_v0/v1_live_qualification.py": "57400e43a2e08d04a38d9c6e8fcf9a490c1031fa",
+    "archimedes_v0/v1_protocol.py": "9a6b41026587edbf73613e967fc6642647fb9da0",
+    "archimedes_v0/v1_v11_critic.py": "ecf0d37f143e6e72bbfac53e9082eb505e152c1e",
+    "archimedes_v0/v1_v11_qualification_runner.py": "2786dd43118a54a8bfb8bc090bc18dbb341e2498",
+    "tests/test_v1_v11_broker_ids.py": "21e0dd6f198b489d7b354bbcf7b2c11ed7fd8d93",
+    "v1_design/prompts/critic_system.txt": "2b827485a7f25d08ec3b522034d4616b42fb86b5"
+  },
+  "source_blob_map_sha256": "9618b864d9f09ce3d974b4d7608eee7f14451fad2d286ae9866f0e7f37c3bad0",
+  "fixture_set": "V1-Critic-Safeguard-1",
+  "fixtures_unchanged_from_v1": true,
+  "historical_v1_completed_fail_preserved": true,
+  "historical_v1_replacement_run_id": 33873946136,
+  "historical_provider_abort_run_id": 33781365337,
+  "v11_interface_change": {
+    "model_generated_experiment_id": false,
+    "trusted_id_rule": "E-CQ{round_index+1}-{position+1:02d}",
+    "trusted_transformation_scope": "inject experiment_id only",
+    "provider_experiment_additional_properties": false
+  },
+  "provider_contract": {
+    "model": "gemini-3.7-flash",
+    "api_revision": "2026-05-20",
+    "seed": 20260902,
+    "thinking_level": "high",
+    "thinking_summaries": "none",
+    "timeout_seconds": 300.0,
+    "automatic_retries": 0,
+    "store": false,
+    "tools_enabled": false
+  },
+  "authorization_source": "REFEREE_DECISION_V11_IMPLEMENTATION_AUTHORIZED.md",
+  "checkpoint_source": "REFEREE_CHECKPOINT_V11_BROKER_ASSIGNED_IDS.md",
+  "notes": "Frozen only after the required A-H synthetic V1.1 tests passed under four PYTHONHASHSEED values and the cross-seed digest comparison succeeded. No V1.1 provider call or causal/Null benchmark exposure has occurred at freeze time."
+}
