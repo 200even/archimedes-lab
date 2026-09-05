@@ -1,0 +1,77 @@
+name: V1.1 Critic Qualification
+
+on:
+  push:
+    paths:
+      - 'V11_CRITIC_QUALIFICATION_TRIGGER.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v11-critic-qualification
+  cancel-in-progress: false
+
+jobs:
+  safeguard:
+    if: github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.14'
+      - name: Validate V1.1 one-shot trigger and frozen authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat V11_CRITIC_QUALIFICATION_TRIGGER.txt)" = "ARCHIMEDES_V11_CRITIC_QUALIFICATION_ONCE"
+          count="$(git log --format=%H -- V11_CRITIC_QUALIFICATION_TRIGGER.txt | wc -l | tr -d ' ')"
+          test "$count" = "1"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path('V11_CRITIC_LIVE_EXECUTION_FREEZE.json')
+          if not p.is_file():
+              raise SystemExit('missing V1.1 frozen execution manifest')
+          d = json.loads(p.read_text())
+          assert d['status'] == 'FROZEN_FOR_AUTHORIZED_V11_THREE_CALL_CRITIC_SAFEGUARD'
+          assert d['authorized_live_critic_calls'] == 3
+          assert d['benchmark_exposure_authorized'] is False
+          assert d['pre_call_v11_determinism']['conclusion'] == 'success'
+          assert d['historical_v1_completed_fail_preserved'] is True
+          PY
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e .
+      - name: Execute exactly three authorized V1.1 Critic slots
+        id: qualification
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set +e
+          python -m archimedes_v0.v1_v11_qualification_runner --out-dir evidence-v11
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
+      - name: Upload immutable V1.1 qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v11-critic-qualification-evidence
+          path: evidence-v11/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Propagate infrastructure abort after evidence upload
+        if: always()
+        shell: bash
+        run: |
+          code="${{ steps.qualification.outputs.exit_code }}"
+          if [ -z "$code" ]; then
+            echo "qualification step did not report an exit code" >&2
+            exit 1
+          fi
+          exit "$code"
