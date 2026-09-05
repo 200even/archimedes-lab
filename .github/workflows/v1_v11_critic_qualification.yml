@@ -33,7 +33,9 @@ jobs:
           test "$count" = "1"
           python - <<'PY'
           import json
+          import subprocess
           from pathlib import Path
+
           p = Path('V11_CRITIC_LIVE_EXECUTION_FREEZE.json')
           if not p.is_file():
               raise SystemExit('missing V1.1 frozen execution manifest')
@@ -43,6 +45,16 @@ jobs:
           assert d['benchmark_exposure_authorized'] is False
           assert d['pre_call_v11_determinism']['conclusion'] == 'success'
           assert d['historical_v1_completed_fail_preserved'] is True
+
+          frozen = d.get('source_blob_shas')
+          if not isinstance(frozen, dict) or not frozen:
+              raise SystemExit('missing frozen V1.1 source blob hashes')
+          for path, expected in sorted(frozen.items()):
+              if not Path(path).is_file():
+                  raise SystemExit(f'frozen source missing: {path}')
+              actual = subprocess.check_output(['git', 'hash-object', path], text=True).strip()
+              if actual != expected:
+                  raise SystemExit(f'frozen source mismatch: {path}: {actual} != {expected}')
           PY
       - run: python -m pip install --upgrade pip
       - run: pip install -e .
