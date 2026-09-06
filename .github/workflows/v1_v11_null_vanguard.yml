@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12.14'
-      - name: Validate one-shot trigger and benchmark authorization
+      - name: Validate one-shot trigger, authorization, and frozen scientific source
         shell: bash
         run: |
           set -euo pipefail
@@ -33,18 +33,39 @@ jobs:
           test "$count" = "1"
           python - <<'PY'
           import json
+          import subprocess
           from pathlib import Path
+
           freeze = json.loads(Path('V11_BENCHMARK_EXECUTION_FREEZE.json').read_text())
+          live = json.loads(Path('V11_NULL_VANGUARD_LIVE_FREEZE.json').read_text())
           assert freeze['status'] == 'FROZEN_BEFORE_FIRST_BENCHMARK_MODEL_EXPOSURE'
           assert freeze['benchmark_exposure_authorized'] is True
           assert freeze['sequence'][0] == 'null_vanguard'
           assert freeze['null_vanguard']['planned_worlds'] == 100
           assert freeze['null_vanguard']['kill_positive_count'] == 5
+          assert live['status'] == 'FROZEN_FOR_AUTHORIZED_V11_NULL_VANGUARD'
+          assert live['planned_null_worlds'] == 100
+          assert live['hallucination_kill_positive_count'] == 5
+          assert live['causal_exposure_authorized_in_this_workflow'] is False
+          assert live['pre_call_v1_determinism']['run_id'] == 34008000078
+          assert live['pre_call_v1_determinism']['conclusion'] == 'success'
+          assert live['pre_call_general_ci']['run_id'] == 34008000131
+          assert live['pre_call_general_ci']['conclusion'] == 'success'
           assert Path('REFEREE_DECISION_V11_BENCHMARK_AUTHORIZED.md').is_file()
           q = json.loads(Path('V11_CRITIC_QUALIFICATION_RESULT.json').read_text())
           assert q['terminal_execution_class'] == 'COMPLETED_PASS'
           assert q['passes_safeguard'] is True
           assert not Path('V11_NULL_VANGUARD_PASS.json').exists()
+
+          source = live['frozen_scientific_source_commit_sha']
+          paths = live['scientific_source_paths']
+          subprocess.run(['git', 'cat-file', '-e', source + '^{commit}'], check=True)
+          # Operational freeze/trigger commits may follow the scientific-source
+          # commit, but none of the model/runtime/scoring inputs may differ.
+          subprocess.run(['git', 'diff', '--quiet', source, 'HEAD', '--', *paths], check=True)
+          for path, expected_blob in live['git_blob_sha'].items():
+              actual = subprocess.check_output(['git', 'hash-object', path], text=True).strip()
+              assert actual == expected_blob, (path, actual, expected_blob)
           PY
       - run: python -m pip install --upgrade pip
       - run: pip install -e .
