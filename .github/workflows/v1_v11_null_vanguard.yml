@@ -1,0 +1,79 @@
+name: V1.1 Null Vanguard
+
+on:
+  push:
+    paths:
+      - 'V11_NULL_VANGUARD_TRIGGER.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v11-null-vanguard
+  cancel-in-progress: false
+
+jobs:
+  vanguard:
+    if: github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.14'
+      - name: Validate one-shot trigger and benchmark authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(cat V11_NULL_VANGUARD_TRIGGER.txt)" = "ARCHIMEDES_V11_NULL_VANGUARD_ONCE"
+          count="$(git log --format=%H -- V11_NULL_VANGUARD_TRIGGER.txt | wc -l | tr -d ' ')"
+          test "$count" = "1"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          freeze = json.loads(Path('V11_BENCHMARK_EXECUTION_FREEZE.json').read_text())
+          assert freeze['status'] == 'FROZEN_BEFORE_FIRST_BENCHMARK_MODEL_EXPOSURE'
+          assert freeze['benchmark_exposure_authorized'] is True
+          assert freeze['sequence'][0] == 'null_vanguard'
+          assert freeze['null_vanguard']['planned_worlds'] == 100
+          assert freeze['null_vanguard']['kill_positive_count'] == 5
+          assert Path('REFEREE_DECISION_V11_BENCHMARK_AUTHORIZED.md').is_file()
+          q = json.loads(Path('V11_CRITIC_QUALIFICATION_RESULT.json').read_text())
+          assert q['terminal_execution_class'] == 'COMPLETED_PASS'
+          assert q['passes_safeguard'] is True
+          assert not Path('V11_NULL_VANGUARD_PASS.json').exists()
+          PY
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e .
+      - name: Execute frozen Full-arm Null vanguard
+        id: benchmark
+        continue-on-error: true
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set +e
+          python -m archimedes_v0.v1_v11_benchmark_runner null --out-dir evidence-null
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
+      - name: Upload immutable Null evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v11-null-vanguard-evidence
+          path: evidence-null/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Propagate infrastructure abort after evidence upload
+        if: always()
+        shell: bash
+        run: |
+          code="${{ steps.benchmark.outputs.exit_code }}"
+          if [ -z "$code" ]; then
+            echo "benchmark step did not report an exit code" >&2
+            exit 1
+          fi
+          exit "$code"
