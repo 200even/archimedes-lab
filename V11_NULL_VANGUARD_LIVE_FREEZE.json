@@ -1,0 +1,74 @@
+{
+  "freeze_version": "v11-null-vanguard-live-1",
+  "status": "FROZEN_FOR_AUTHORIZED_V11_NULL_VANGUARD",
+  "frozen_scientific_source_commit_sha": "6bbb548062f3760a81e6013b2e066e22569cab31",
+  "pre_call_v1_determinism": {
+    "run_id": 34008000078,
+    "conclusion": "success",
+    "all_hashseeds": [0, 1, 42, 314159],
+    "cross_seed_byte_compare": "success"
+  },
+  "pre_call_general_ci": {
+    "run_id": 34008000131,
+    "conclusion": "success"
+  },
+  "critic_qualification": {
+    "run_id": 33985538138,
+    "terminal_execution_class": "COMPLETED_PASS",
+    "passes_safeguard": true,
+    "result_git_blob_sha": "7aea0faf9ddf44528b8a1418801f88a158088cdf"
+  },
+  "referee_decision": "AUTHORIZE V1.1 BENCHMARK EXPOSURE",
+  "planned_null_worlds": 100,
+  "hallucination_kill_positive_count": 5,
+  "null_positive_definition": "empirical_A_gate_passed_and_B_reached",
+  "causal_exposure_authorized_in_this_workflow": false,
+  "provider": {
+    "model": "gemini-3.7-flash",
+    "api_revision": "2026-05-20",
+    "thinking_level": "high",
+    "thinking_summaries": "none",
+    "seed": 20260902,
+    "timeout_seconds": 300.0,
+    "automatic_retries": 0,
+    "store": false,
+    "tools": false
+  },
+  "scientific_source_paths": [
+    "archimedes_v0/v1_agent_interfaces.py",
+    "archimedes_v0/v1_broker.py",
+    "archimedes_v0/v1_gemini_backend.py",
+    "archimedes_v0/v1_orchestrator.py",
+    "archimedes_v0/v1_protocol.py",
+    "archimedes_v0/v1_v11_critic.py",
+    "archimedes_v0/v1_v11_benchmark_agents.py",
+    "archimedes_v0/v1_v11_benchmark_runner.py",
+    "archimedes_v0/generator.py",
+    "archimedes_v0/world.py",
+    "archimedes_v0/analysis_plan.py",
+    "V11_BENCHMARK_EXECUTION_FREEZE.json",
+    "V1_PROMPT_MANIFEST.json",
+    "v1_design/prompts/conjecturer_system.txt",
+    "v1_design/prompts/critic_system.txt",
+    "v1_design/prompts/flat_system.txt"
+  ],
+  "git_blob_sha": {
+    "archimedes_v0/v1_agent_interfaces.py": "c8f99b599aa65930de59a00aed2cefce443c603d",
+    "archimedes_v0/v1_broker.py": "f151acc3acd8235208f7b02139595138c5202034",
+    "archimedes_v0/v1_gemini_backend.py": "559f7e194e11df94367a6e89deb189c9128caff6",
+    "archimedes_v0/v1_orchestrator.py": "230ce07c53993ed8d5da156c89a2562b5544d06b",
+    "archimedes_v0/v1_protocol.py": "9a6b41026587edbf73613e967fc6642647fb9da0",
+    "archimedes_v0/v1_v11_critic.py": "ecf0d37f143e6e72bbfac53e9082eb505e152c1e",
+    "archimedes_v0/v1_v11_benchmark_agents.py": "ed0a88b7aad8366eabe4c094f63332c8cac0eae3",
+    "archimedes_v0/v1_v11_benchmark_runner.py": "906bfd45dc3a9e67573ab416ca2bfca577c37ef0",
+    "archimedes_v0/generator.py": "de0fcae27e9f1722f32ac97b51252f5aab231ee2",
+    "archimedes_v0/world.py": "399061cfb8eaa03360a50219e0363c313c5ef94f",
+    "archimedes_v0/analysis_plan.py": "b210b33e4e11f33c06854c1bf5e3265641068e6e",
+    "V11_BENCHMARK_EXECUTION_FREEZE.json": "26ae04bed89011ddf0e9000ecbb32dbda17fcd0b",
+    "V1_PROMPT_MANIFEST.json": "1e6b6a3ff19f1aff1e32e73fabd1994a256e2c00",
+    "V11_CRITIC_QUALIFICATION_RESULT.json": "7aea0faf9ddf44528b8a1418801f88a158088cdf",
+    ".github/workflows/v1_v11_null_vanguard.yml": "f31365c17fd38277b4e5490b4cd0ad01447c2e89"
+  },
+  "first_benchmark_model_exposure": "creation of V11_NULL_VANGUARD_TRIGGER.txt after this freeze",
+  "manual_rerun_permitted": false
+}
