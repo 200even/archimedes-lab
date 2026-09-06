@@ -1,0 +1,83 @@
+{
+  "freeze_version": "v11-benchmark-1",
+  "status": "FROZEN_BEFORE_FIRST_BENCHMARK_MODEL_EXPOSURE",
+  "referee_authorization": "AUTHORIZE V1.1 BENCHMARK EXPOSURE",
+  "benchmark_exposure_authorized": true,
+  "sequence": ["null_vanguard", "causal_paired_if_null_passes", "compute_audit", "d4_analysis"],
+  "world_seed_schedule": {
+    "algorithm": "sha256_first8_big_endian_mask63",
+    "namespace": "Archimedes-V1.1-Benchmark",
+    "input_format": "{namespace}|{phase}|{index:03d}",
+    "null_phase": "vanguard",
+    "causal_phase": "paired",
+    "null_indices": [0, 99],
+    "causal_indices": [0, 99],
+    "generator_max_attempts": 1000,
+    "world_id_algorithm": "v11-w- + first20hex(sha256('Archimedes-V1.1-WorldID|{phase}|{index:03d}'))"
+  },
+  "null_vanguard": {
+    "arm": "full_only",
+    "planned_worlds": 100,
+    "positive_definition": "empirical_A_gate_passed_and_B_reached",
+    "kill_positive_count": 5,
+    "fpr_kill_threshold": 0.05,
+    "early_stop_once_kill_is_mathematically_certain": true,
+    "causal_exposure_before_pass": false
+  },
+  "causal": {
+    "paired_worlds": 100,
+    "same_hidden_world_definition_both_arms": true,
+    "arm_execution_order": "even_index_full_then_flat; odd_index_flat_then_full",
+    "per_world_score": "sealed_B_transfer_correct/32_if_transfer_reached_else_0",
+    "analysis_after_all_pairs_only": true
+  },
+  "v11_bookkeeping": {
+    "model_facing_experiment_id": false,
+    "trusted_id_rule": "E-R{round_index+1:02d}-{position+1:02d}",
+    "applied_symmetrically_to": ["full_critic_select", "flat_select"],
+    "rationale": "experiment_id is referee-accepted non-semantic bookkeeping; symmetric trusted assignment prevents a serialization confound between arms",
+    "all_other_intervention_fields_model_generated": true,
+    "additional_properties_forbidden": true
+  },
+  "provider": {
+    "model": "gemini-3.7-flash",
+    "api_revision": "2026-05-20",
+    "thinking_level": "high",
+    "thinking_summaries": "none",
+    "seed": 20260902,
+    "timeout_seconds": 300.0,
+    "automatic_retries": 0,
+    "store": false,
+    "tools": false
+  },
+  "partition_enforcement": {
+    "minimum_k": 2,
+    "maximum_k": 4,
+    "maximum_rule": "floor(sqrt(16))",
+    "minimum_entities_per_class": 2,
+    "all_16_entities_exactly_once": true
+  },
+  "compute_audit": {
+    "causal_metric": "provider_total_tokens",
+    "ratio": "aggregate_full_total_tokens/aggregate_flat_total_tokens",
+    "must_be_calculated_before_primary_d4_analysis": true,
+    "full_win_invalid_if_ratio_gt": 1.05,
+    "ratio_lt_0_95_interpretation": "conservative Flat compute advantage; does not invalidate Full win",
+    "missing_provider_total_tokens": "compute_audit_invalid_no_superiority_claim",
+    "posthoc_topups": false
+  },
+  "primary_analysis": {
+    "paired_worlds": 100,
+    "test": "one_sided_paired_sign_flip",
+    "draws": 100000,
+    "seed": 20260830,
+    "alpha": 0.05,
+    "minimum_mean_full_minus_flat": 0.05
+  },
+  "infrastructure_policy": {
+    "provider_failure": "abort_current_benchmark_phase_and_stop_further_model_exposure",
+    "semantic_output_failure": "world_arm_score_zero_per_frozen_orchestrator_no_retry",
+    "model_id_change": "provider_failure_abort",
+    "manual_rerun": false
+  }
+}
